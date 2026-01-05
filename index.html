@@ -1,0 +1,575 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mobile Smart POS</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+    <style>
+        /* 移动端优化 */
+        body { -webkit-tap-highlight-color: transparent; }
+        .touch-target { min-height: 44px; min-width: 44px; }
+        /* 隐藏滚动条但保留功能 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        /* 扫码框自定义样式 */
+        #reader__scan_region { background: white; }
+        #reader__dashboard_section_csr span { display: none; } 
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#2563eb',
+                        secondary: '#64748b',
+                        surface: '#f8fafc'
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50 text-slate-800 font-sans h-screen flex flex-col overflow-hidden">
+
+    <header class="bg-white border-b px-4 py-3 flex justify-between items-center shadow-sm z-10">
+        <h1 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+            <i data-lucide="scan-barcode" class="w-6 h-6 text-primary"></i>
+            Smart POS
+        </h1>
+        <div id="header-actions">
+            </div>
+    </header>
+
+    <main id="app" class="flex-1 overflow-y-auto relative p-4 no-scrollbar">
+        </main>
+
+    <nav class="bg-white border-t flex justify-around items-center pb-safe z-20">
+        <button onclick="router.navigate('cashier')" class="flex-1 py-3 flex flex-col items-center gap-1 text-xs text-slate-500 hover:text-primary transition-colors touch-target nav-btn" data-target="cashier">
+            <i data-lucide="shopping-cart" class="w-6 h-6"></i>
+            收银
+        </button>
+        <button onclick="router.navigate('entry')" class="flex-1 py-3 flex flex-col items-center gap-1 text-xs text-slate-500 hover:text-primary transition-colors touch-target nav-btn" data-target="entry">
+            <i data-lucide="plus-square" class="w-6 h-6"></i>
+            入库
+        </button>
+        <button onclick="router.navigate('inventory')" class="flex-1 py-3 flex flex-col items-center gap-1 text-xs text-slate-500 hover:text-primary transition-colors touch-target nav-btn" data-target="inventory">
+            <i data-lucide="package" class="w-6 h-6"></i>
+            管理
+        </button>
+        <button onclick="router.navigate('analytics')" class="flex-1 py-3 flex flex-col items-center gap-1 text-xs text-slate-500 hover:text-primary transition-colors touch-target nav-btn" data-target="analytics">
+            <i data-lucide="bar-chart-2" class="w-6 h-6"></i>
+            报表
+        </button>
+    </nav>
+
+    <div id="modal-overlay" class="fixed inset-0 bg-black/50 hidden z-50 flex items-end sm:items-center justify-center transition-opacity duration-300">
+        <div id="modal-content" class="bg-white w-full sm:w-[400px] rounded-t-2xl sm:rounded-xl p-6 shadow-2xl transform transition-transform duration-300 translate-y-full sm:translate-y-0">
+            </div>
+    </div>
+
+    <script>
+        // --- 1. State Management & Storage ---
+        const Store = {
+            data: {
+                products: [], // { barcode, name, costPrice, retailPrice, id }
+                transactions: [], // { id, date, items: [], totalAmount, totalCount, type }
+                autoNameCount: 1
+            },
+            init() {
+                const loaded = localStorage.getItem('pos_data');
+                if (loaded) this.data = JSON.parse(loaded);
+            },
+            save() {
+                localStorage.setItem('pos_data', JSON.stringify(this.data));
+            },
+            addProduct(product) {
+                const existingIndex = this.data.products.findIndex(p => p.barcode === product.barcode);
+                if (existingIndex >= 0) {
+                    this.data.products[existingIndex] = { ...this.data.products[existingIndex], ...product };
+                } else {
+                    this.data.products.push({ ...product, id: Date.now() });
+                }
+                this.save();
+            },
+            deleteProduct(barcode) {
+                this.data.products = this.data.products.filter(p => p.barcode !== barcode);
+                this.save();
+            },
+            addTransaction(transaction) {
+                this.data.transactions.push(transaction);
+                this.save();
+            },
+            getProduct(barcode) {
+                return this.data.products.find(p => p.barcode === barcode);
+            },
+            getNextAutoName() {
+                const name = `未命名商品 ${this.data.autoNameCount}`;
+                return name;
+            },
+            incrementAutoName() {
+                this.data.autoNameCount++;
+                this.save();
+            }
+        };
+
+        // --- 2. Utils ---
+        const Utils = {
+            formatCurrency: (num) => `¥${parseFloat(num).toFixed(2)}`,
+            vibrate: () => { if (navigator.vibrate) navigator.vibrate(50); },
+            generateId: () => Math.random().toString(36).substr(2, 9),
+            now: () => new Date().toISOString()
+        };
+
+        // --- 3. Scanning Module ---
+        let html5QrcodeScanner = null;
+        
+        const Scanner = {
+            start: (elementId, callback) => {
+                if (html5QrcodeScanner) Scanner.stop();
+                // 简单的实例化，真实场景可配置 fps, qrbox 等
+                html5QrcodeScanner = new Html5Qrcode(elementId);
+                const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+                
+                html5QrcodeScanner.start({ facingMode: "environment" }, config, (decodedText) => {
+                    Utils.vibrate();
+                    callback(decodedText);
+                }, (errorMessage) => {
+                    // ignore errors
+                }).catch(err => console.error(err));
+            },
+            stop: () => {
+                if (html5QrcodeScanner) {
+                    html5QrcodeScanner.stop().then(() => {
+                        html5QrcodeScanner.clear();
+                        html5QrcodeScanner = null;
+                    }).catch(err => console.log("Stop failed", err));
+                }
+            }
+        };
+
+        // --- 4. UI Components & Views ---
+
+        // View: Inventory Entry (入库)
+        const EntryView = {
+            render: () => {
+                return `
+                    <div class="flex flex-col h-full gap-4">
+                        <div id="reader" class="w-full bg-black rounded-lg overflow-hidden h-64 shadow-inner relative">
+                            <div class="absolute inset-0 flex items-center justify-center text-white/50">
+                                <span class="text-sm">点击下方按钮开启扫描</span>
+                            </div>
+                        </div>
+                        <button onclick="EntryView.startScan()" class="bg-primary text-white py-4 rounded-xl font-bold shadow-lg shadow-primary/30 active:scale-95 transition-transform flex items-center justify-center gap-2">
+                            <i data-lucide="camera"></i> 开启摄像头扫码入库
+                        </button>
+                        <div class="text-center text-slate-400 text-xs mt-2">
+                            支持连续扫码模式
+                        </div>
+                    </div>
+                `;
+            },
+            startScan: () => {
+                document.getElementById('reader').innerHTML = ''; // Clear placeholder
+                Scanner.start("reader", (barcode) => {
+                    // Scan Success
+                    Scanner.stop(); // Pause scanning for modal
+                    EntryView.openEditModal(barcode);
+                });
+            },
+            openEditModal: (barcode) => {
+                const existing = Store.getProduct(barcode);
+                const defaultName = existing ? existing.name : ''; 
+                const defaultCost = existing ? existing.costPrice : '';
+                const defaultRetail = existing ? existing.retailPrice : '';
+                
+                Modal.show(`
+                    <h2 class="text-xl font-bold mb-4">商品入库</h2>
+                    <form id="entry-form" onsubmit="EntryView.save(event)">
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs text-slate-500 mb-1">条形码</label>
+                                <input type="text" name="barcode" value="${barcode}" class="w-full bg-slate-100 p-3 rounded-lg font-mono text-sm" readonly>
+                            </div>
+                            <div>
+                                <label class="block text-xs text-slate-500 mb-1">商品名称</label>
+                                <input type="text" name="name" placeholder="留空自动命名" value="${defaultName}" class="w-full border p-3 rounded-lg focus:ring-2 ring-primary outline-none">
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs text-slate-500 mb-1">批发价</label>
+                                    <input type="number" name="costPrice" step="0.01" value="${defaultCost}" inputmode="decimal" class="w-full border p-3 rounded-lg focus:ring-2 ring-primary outline-none" required>
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-slate-500 mb-1">零售价</label>
+                                    <input type="number" name="retailPrice" step="0.01" value="${defaultRetail}" inputmode="decimal" class="w-full border p-3 rounded-lg focus:ring-2 ring-primary outline-none" required>
+                                </div>
+                            </div>
+                            <div class="pt-4 flex gap-3">
+                                <button type="button" onclick="Modal.hide(); EntryView.startScan()" class="flex-1 py-3 text-slate-500 bg-slate-100 rounded-lg">取消</button>
+                                <button type="submit" class="flex-1 py-3 bg-primary text-white rounded-lg font-bold shadow-md">保存并继续</button>
+                            </div>
+                        </div>
+                    </form>
+                `);
+            },
+            save: (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                let name = formData.get('name').trim();
+                const barcode = formData.get('barcode');
+
+                if (!name) {
+                    name = Store.getNextAutoName();
+                    Store.incrementAutoName();
+                }
+
+                Store.addProduct({
+                    barcode: barcode,
+                    name: name,
+                    costPrice: parseFloat(formData.get('costPrice')),
+                    retailPrice: parseFloat(formData.get('retailPrice'))
+                });
+
+                Modal.hide();
+                // Continuous Loop
+                setTimeout(() => EntryView.startScan(), 300);
+                Toast.show(`已保存: ${name}`);
+            }
+        };
+
+        // View: Cashier (收银)
+        const CashierView = {
+            cart: [],
+            mode: 'retail', // or 'wholesale'
+            render: () => {
+                // Update Header
+                const header = document.getElementById('header-actions');
+                header.innerHTML = `
+                    <div class="flex bg-slate-100 rounded-lg p-1">
+                        <button onclick="CashierView.toggleMode('retail')" id="mode-retail" class="px-3 py-1 text-xs rounded-md ${CashierView.mode === 'retail' ? 'bg-white shadow text-primary font-bold' : 'text-slate-500'}">零售</button>
+                        <button onclick="CashierView.toggleMode('wholesale')" id="mode-wholesale" class="px-3 py-1 text-xs rounded-md ${CashierView.mode === 'wholesale' ? 'bg-white shadow text-primary font-bold' : 'text-slate-500'}">批发</button>
+                    </div>
+                `;
+
+                return `
+                    <div class="flex flex-col h-full">
+                        <div class="flex gap-2 mb-4">
+                            <input type="text" id="cashier-input" placeholder="扫码或输入条码..." class="flex-1 border p-3 rounded-lg shadow-sm" onkeypress="CashierView.handleInput(event)">
+                            <button onclick="CashierView.openScanner()" class="bg-slate-800 text-white w-12 rounded-lg flex items-center justify-center">
+                                <i data-lucide="scan"></i>
+                            </button>
+                        </div>
+                        
+                        <div id="cart-list" class="flex-1 overflow-y-auto space-y-2 pb-20">
+                            ${CashierView.cart.length === 0 ? '<div class="text-center text-slate-400 mt-10">购物车为空</div>' : ''}
+                            ${CashierView.cart.map((item, index) => `
+                                <div class="bg-white p-3 rounded-lg shadow-sm border border-slate-100 flex justify-between items-center">
+                                    <div class="flex-1">
+                                        <div class="font-medium text-slate-800">${item.name}</div>
+                                        <div class="text-xs text-slate-400 font-mono">${item.barcode}</div>
+                                        <div class="text-primary font-bold mt-1">${Utils.formatCurrency(item.price)}</div>
+                                    </div>
+                                    <div class="flex items-center gap-3 bg-slate-50 rounded-lg p-1">
+                                        <button onclick="CashierView.updateQty(${index}, -1)" class="w-8 h-8 flex items-center justify-center text-slate-500 active:bg-slate-200 rounded">-</button>
+                                        <span class="font-bold w-4 text-center">${item.qty}</span>
+                                        <button onclick="CashierView.updateQty(${index}, 1)" class="w-8 h-8 flex items-center justify-center text-primary active:bg-blue-100 rounded">+</button>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+
+                        <div class="fixed bottom-[60px] left-0 right-0 bg-white border-t p-4 shadow-lg z-10">
+                            <div class="flex justify-between items-end mb-3">
+                                <div class="text-slate-500 text-sm">共 ${CashierView.cart.reduce((a, b) => a + b.qty, 0)} 件</div>
+                                <div class="text-2xl font-bold text-slate-800">
+                                    ${Utils.formatCurrency(CashierView.getTotal())}
+                                </div>
+                            </div>
+                            <button onclick="CashierView.checkout()" class="w-full bg-green-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-green-600/30 active:scale-95 transition-transform">
+                                结算收款
+                            </button>
+                        </div>
+                    </div>
+                `;
+            },
+            toggleMode: (mode) => {
+                CashierView.mode = mode;
+                // Recalculate prices in cart based on mode
+                CashierView.cart = CashierView.cart.map(item => {
+                    const product = Store.getProduct(item.barcode);
+                    return { ...item, price: mode === 'retail' ? product.retailPrice : product.costPrice };
+                });
+                router.refresh();
+            },
+            handleInput: (e) => {
+                if (e.key === 'Enter') {
+                    CashierView.addToCart(e.target.value);
+                    e.target.value = '';
+                }
+            },
+            openScanner: () => {
+                Modal.show(`
+                   <div id="cashier-reader" class="w-full h-64 bg-black"></div>
+                   <button onclick="Modal.hide(); Scanner.stop()" class="w-full mt-4 py-2 border rounded">关闭</button>
+                `);
+                Scanner.start("cashier-reader", (barcode) => {
+                    Scanner.stop();
+                    Modal.hide();
+                    CashierView.addToCart(barcode);
+                });
+            },
+            addToCart: (barcode) => {
+                const product = Store.getProduct(barcode);
+                if (!product) {
+                    Toast.show("未找到商品，请先入库", "error");
+                    return;
+                }
+                const existing = CashierView.cart.find(i => i.barcode === barcode);
+                if (existing) {
+                    existing.qty++;
+                } else {
+                    CashierView.cart.push({
+                        barcode: product.barcode,
+                        name: product.name,
+                        price: CashierView.mode === 'retail' ? product.retailPrice : product.costPrice,
+                        cost: product.costPrice, // Store cost for profit calc
+                        qty: 1
+                    });
+                }
+                router.refresh();
+                Utils.vibrate();
+            },
+            updateQty: (index, delta) => {
+                const item = CashierView.cart[index];
+                item.qty += delta;
+                if (item.qty <= 0) {
+                    CashierView.cart.splice(index, 1);
+                }
+                router.refresh();
+            },
+            getTotal: () => {
+                return CashierView.cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+            },
+            checkout: () => {
+                if (CashierView.cart.length === 0) return;
+                const total = CashierView.getTotal();
+                Store.addTransaction({
+                    id: Utils.generateId(),
+                    date: Utils.now(),
+                    items: [...CashierView.cart],
+                    totalAmount: total,
+                    totalCount: CashierView.cart.reduce((a, b) => a + b.qty, 0),
+                    type: CashierView.mode
+                });
+                CashierView.cart = [];
+                router.refresh();
+                Toast.show(`结算成功 ${Utils.formatCurrency(total)}`);
+            }
+        };
+
+        // View: Inventory Management (管理)
+        const InventoryView = {
+            searchQuery: '',
+            render: () => {
+                const products = Store.data.products.filter(p => 
+                    p.name.includes(InventoryView.searchQuery) || p.barcode.includes(InventoryView.searchQuery)
+                );
+                
+                // Add header action for export
+                document.getElementById('header-actions').innerHTML = `
+                   <button onclick="InventoryView.exportExcel()" class="text-xs bg-slate-100 p-2 rounded flex gap-1">
+                      <i data-lucide="download" class="w-4 h-4"></i> 导出
+                   </button>
+                   <label class="text-xs bg-slate-100 p-2 rounded flex gap-1 ml-2 cursor-pointer">
+                      <i data-lucide="upload" class="w-4 h-4"></i> 导入
+                      <input type="file" hidden onchange="InventoryView.importExcel(event)" accept=".xlsx, .xls">
+                   </label>
+                `;
+
+                return `
+                    <div class="space-y-4">
+                        <input type="text" placeholder="搜索商品名称或条码..." 
+                            value="${InventoryView.searchQuery}"
+                            oninput="InventoryView.search(this.value)"
+                            class="w-full border p-3 rounded-lg shadow-sm bg-white sticky top-0 z-10">
+                        
+                        <div class="space-y-2 pb-20">
+                             ${products.length === 0 ? '<div class="text-center text-slate-400 mt-10">无商品数据</div>' : ''}
+                             ${products.map(p => `
+                                <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-100 flex justify-between">
+                                    <div>
+                                        <div class="font-bold text-slate-800">${p.name}</div>
+                                        <div class="text-xs text-slate-400 font-mono mt-1">${p.barcode}</div>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="text-primary font-bold">${Utils.formatCurrency(p.retailPrice)}</div>
+                                        <div class="text-xs text-slate-400">进: ${Utils.formatCurrency(p.costPrice)}</div>
+                                        <button onclick="Store.deleteProduct('${p.barcode}'); router.refresh()" class="text-red-400 text-xs mt-2 underline">删除</button>
+                                    </div>
+                                </div>
+                             `).join('')}
+                        </div>
+                    </div>
+                `;
+            },
+            search: (val) => {
+                InventoryView.searchQuery = val;
+                router.refresh(); // Inefficient but fine for small list. In real app, update DOM directly.
+            },
+            exportExcel: () => {
+                const ws = XLSX.utils.json_to_sheet(Store.data.products);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Products");
+                XLSX.writeFile(wb, "Inventory.xlsx");
+            },
+            importExcel: (e) => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    const bstr = evt.target.result;
+                    const wb = XLSX.read(bstr, {type:'binary'});
+                    const wsname = wb.SheetNames[0];
+                    const ws = wb.Sheets[wsname];
+                    const data = XLSX.utils.sheet_to_json(ws);
+                    data.forEach(row => {
+                         // Mapping logic based on excel columns (Assuming keys match)
+                         if(row.barcode) Store.addProduct(row);
+                    });
+                    Toast.show(`导入成功 ${data.length} 条数据`);
+                    router.refresh();
+                };
+                reader.readAsBinaryString(file);
+            }
+        };
+
+        // View: Analytics (报表)
+        const AnalyticsView = {
+            render: () => {
+                document.getElementById('header-actions').innerHTML = '';
+                
+                const txs = Store.data.transactions;
+                const totalSales = txs.reduce((sum, t) => sum + t.totalAmount, 0);
+                const totalProfit = txs.reduce((sum, t) => {
+                    const cost = t.items.reduce((c, i) => c + (i.cost * i.qty), 0);
+                    return sum + (t.totalAmount - cost);
+                }, 0);
+
+                return `
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-4 rounded-xl shadow-lg">
+                                <div class="text-blue-100 text-xs mb-1">总销售额</div>
+                                <div class="text-2xl font-bold">${Utils.formatCurrency(totalSales)}</div>
+                            </div>
+                            <div class="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white p-4 rounded-xl shadow-lg">
+                                <div class="text-emerald-100 text-xs mb-1">预估利润</div>
+                                <div class="text-2xl font-bold">${Utils.formatCurrency(totalProfit)}</div>
+                            </div>
+                        </div>
+
+                        <h3 class="font-bold text-slate-700 mt-6 mb-2">最近交易</h3>
+                        <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-hidden">
+                            ${txs.slice().reverse().map(t => `
+                                <div class="p-3 border-b last:border-0 flex justify-between items-center">
+                                    <div>
+                                        <div class="text-xs text-slate-400">${new Date(t.date).toLocaleString()}</div>
+                                        <div class="text-sm text-slate-800 mt-1">${t.items.length} 种商品</div>
+                                    </div>
+                                    <div class="font-bold text-primary">
+                                        +${Utils.formatCurrency(t.totalAmount)}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+        };
+
+        // --- 5. Routing System ---
+        const router = {
+            current: 'cashier', // Default view
+            routes: {
+                'entry': EntryView,
+                'inventory': InventoryView,
+                'cashier': CashierView,
+                'analytics': AnalyticsView
+            },
+            navigate: (viewName) => {
+                Scanner.stop(); // Stop any active scanners when switching
+                router.current = viewName;
+                
+                // Active Tab Style
+                document.querySelectorAll('.nav-btn').forEach(btn => {
+                    const target = btn.dataset.target;
+                    if(target === viewName) {
+                        btn.classList.add('text-primary');
+                        btn.classList.remove('text-slate-500');
+                    } else {
+                        btn.classList.remove('text-primary');
+                        btn.classList.add('text-slate-500');
+                    }
+                });
+
+                router.refresh();
+            },
+            refresh: () => {
+                const app = document.getElementById('app');
+                app.innerHTML = router.routes[router.current].render();
+                lucide.createIcons();
+            }
+        };
+
+        // --- 6. Global UI Components (Modal, Toast) ---
+        const Modal = {
+            el: document.getElementById('modal-overlay'),
+            content: document.getElementById('modal-content'),
+            show: (html) => {
+                Modal.content.innerHTML = html;
+                Modal.el.classList.remove('hidden');
+                // Animation hack
+                setTimeout(() => {
+                    Modal.content.classList.remove('translate-y-full');
+                }, 10);
+            },
+            hide: () => {
+                Modal.content.classList.add('translate-y-full');
+                setTimeout(() => {
+                    Modal.el.classList.add('hidden');
+                }, 300);
+            }
+        };
+
+        const Toast = {
+            show: (msg, type = 'success') => {
+                const div = document.createElement('div');
+                div.className = `fixed top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full shadow-xl text-white text-sm font-bold z-50 transition-all duration-300 transform translate-y-[-20px] opacity-0 ${type === 'error' ? 'bg-red-500' : 'bg-slate-800'}`;
+                div.textContent = msg;
+                document.body.appendChild(div);
+                
+                requestAnimationFrame(() => {
+                    div.classList.remove('translate-y-[-20px]', 'opacity-0');
+                });
+
+                setTimeout(() => {
+                    div.classList.add('opacity-0');
+                    setTimeout(() => div.remove(), 300);
+                }, 2000);
+            }
+        };
+
+        // --- 7. Initialization ---
+        window.addEventListener('DOMContentLoaded', () => {
+            Store.init();
+            router.navigate('cashier'); // Initialize
+        });
+
+    </script>
+</body>
+</html>
