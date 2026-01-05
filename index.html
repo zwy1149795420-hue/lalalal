@@ -3,23 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>极简收银系统</title>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <title>极简收银系统 (巴西加速版)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.3.4/vue.global.prod.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.39.7/supabase.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
     <style>
-        /* 隐藏滚动条但保留功能 */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         body { background-color: #f3f4f6; }
+        /* 防止页面未加载完成时显示乱码 */
+        [v-cloak] { display: none; }
     </style>
 </head>
 <body>
 
-<div id="app" class="h-screen flex flex-col max-w-md mx-auto bg-white shadow-xl relative">
+<div id="app" v-cloak class="h-screen flex flex-col max-w-md mx-auto bg-white shadow-xl relative">
     
     <div class="bg-blue-600 text-white p-4 flex justify-between items-center z-10">
         <h1 class="font-bold text-lg">{{ pageTitles[currentPage] }}</h1>
@@ -42,14 +43,14 @@
                 <input ref="scannerInput" v-model="entryForm.barcode" @keyup.enter="handleEntryScan" placeholder="点击此处使用扫码枪" class="w-full mt-2 p-2 border rounded focus:bg-blue-50 outline-none">
             </div>
 
-            <div v-if="showEntryForm" class="bg-white p-4 border rounded-lg shadow-sm space-y-3 animate-fade-in">
+            <div v-if="showEntryForm" class="bg-white p-4 border rounded-lg shadow-sm space-y-3">
                 <h3 class="font-bold text-gray-700">完善商品信息</h3>
                 <div>
                     <label class="text-xs text-gray-500">条形码</label>
                     <input v-model="entryForm.barcode" class="w-full p-2 border rounded bg-gray-100" readonly>
                 </div>
                 <div>
-                    <label class="text-xs text-gray-500">商品名称 (不填自动命名)</label>
+                    <label class="text-xs text-gray-500">商品名称</label>
                     <input v-model="entryForm.name" placeholder="例如：可乐 330ml" class="w-full p-2 border rounded">
                 </div>
                 <div class="grid grid-cols-2 gap-2">
@@ -82,7 +83,7 @@
             </div>
 
             <div class="p-2">
-                 <input ref="cashierInput" v-model="cashierBarcode" @keyup.enter="handleCashierScan" placeholder="🔍 聚焦此处扫码或输入条码" class="w-full p-3 border-2 border-blue-100 rounded-lg focus:border-blue-500 outline-none text-center text-lg">
+                 <input ref="cashierInput" v-model="cashierBarcode" @keyup.enter="handleCashierScan" placeholder="🔍 聚焦此处扫码" class="w-full p-3 border-2 border-blue-100 rounded-lg focus:border-blue-500 outline-none text-center text-lg">
                  <button @click="toggleCamera" class="w-full mt-2 text-sm text-blue-500"><i class="fas fa-camera"></i> 手机相机扫码</button>
                  <div v-show="showCamera" id="reader-cashier" class="w-full h-48 bg-black mt-2"></div>
             </div>
@@ -126,7 +127,7 @@
                 <div class="space-x-2">
                     <button @click="exportExcel" class="bg-green-500 text-white px-3 py-1 text-xs rounded">导出Excel</button>
                     <label class="bg-blue-500 text-white px-3 py-1 text-xs rounded cursor-pointer">
-                        导入Excel <input type="file" @change="importExcel" class="hidden" accept=".xlsx,.xls">
+                        导入 <input type="file" @change="importExcel" class="hidden" accept=".xlsx,.xls">
                     </label>
                 </div>
             </div>
@@ -144,9 +145,7 @@
                             <label class="text-[10px] text-gray-400">批发价</label>
                             <input type="number" v-model="p.wholesale_price" @change="updateProduct(p)" class="w-full text-sm p-1 border rounded text-red-500">
                         </div>
-                    </div>
-                    <div class="flex gap-4 mt-1">
-                         <div class="flex-1">
+                        <div class="flex-1">
                             <label class="text-[10px] text-gray-400">零售价</label>
                             <input type="number" v-model="p.retail_price" @change="updateProduct(p)" class="w-full text-sm p-1 border rounded text-green-600">
                         </div>
@@ -161,7 +160,7 @@
 <script>
     const { createApp, ref, computed, onMounted, nextTick } = Vue;
     
-    // ⬇️⬇️⬇️ 这里就是我帮你自动填好的地方，不要动它 ⬇️⬇️⬇️
+    // 已为你填好 API Key
     const SUPABASE_URL = 'https://ovhjhqfjygwzvfpaiejb.supabase.co'; 
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92aGpocWZqeWd3enZmcGFpZWpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc2MzU5ODcsImV4cCI6MjA4MzIxMTk4N30.r94pDQmmPzX3sD4u1oarFICDnijuC_vX5C51KhsmAbU'; 
 
@@ -175,12 +174,10 @@
             const entryMessage = ref('');
             const entryForm = ref({ barcode: '', name: '', wholesale_price: '', retail_price: '' });
             const scannerInput = ref(null);
-            
             const priceMode = ref('retail');
             const cashierBarcode = ref('');
             const cart = ref([]);
             const cashierInput = ref(null);
-
             const showCamera = ref(false);
             let html5QrcodeScanner = null;
 
