@@ -12,9 +12,10 @@
     <style>
         body { -webkit-tap-highlight-color: transparent; }
         .touch-target { min-height: 44px; min-width: 44px; }
-        /* 隐藏滚动条 */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        /* 强制覆盖 html5-qrcode 的部分默认样式，防止它自带的文字乱跑 */
+        #fullscreen-reader__scan_region { background: rgba(0,0,0,0.5); }
     </style>
     <script>
         tailwind.config = {
@@ -54,12 +55,29 @@
         </button>
     </nav>
 
-    <div id="modal-overlay" class="fixed inset-0 bg-black/50 hidden z-50 flex items-end sm:items-center justify-center transition-opacity duration-300">
-        <div id="modal-content" class="bg-white w-full sm:w-[400px] rounded-t-2xl sm:rounded-xl p-6 shadow-2xl transform transition-transform duration-300 translate-y-full sm:translate-y-0"></div>
+    <div id="modal-overlay" class="fixed inset-0 bg-black/50 hidden z-40 flex items-end sm:items-center justify-center transition-opacity duration-300">
+        <div id="modal-content" class="bg-white w-full sm:w-[400px] rounded-t-2xl sm:rounded-xl p-6 shadow-2xl transform transition-transform duration-300 translate-y-full sm:translate-y-0 max-h-[90vh] overflow-y-auto"></div>
+    </div>
+
+    <div id="scanner-overlay" class="fixed inset-0 bg-black z-[60] hidden flex flex-col">
+        <div class="p-4 flex justify-between items-center text-white bg-black/50 absolute top-0 left-0 right-0 z-10">
+            <span class="font-bold">扫码中...</span>
+            <button onclick="ScannerOverlay.hide()" class="bg-white/20 p-2 rounded-full backdrop-blur-sm">
+                <i data-lucide="x" class="w-6 h-6 text-white"></i>
+            </button>
+        </div>
+        
+        <div id="fullscreen-reader" class="flex-1 bg-black relative w-full h-full"></div>
+        
+        <div class="p-6 bg-black pb-safe shrink-0 z-10">
+             <button onclick="ScannerOverlay.hide()" class="w-full bg-white text-black py-4 rounded-xl font-bold text-lg shadow-lg active:scale-95 transition-transform">
+                 关闭摄像头
+             </button>
+        </div>
     </div>
 
     <script>
-        // State & Utils (保持不变，省略以节省空间，与上一版一致)
+        // --- 1. State & Storage ---
         const Store = {
             data: { products: [], transactions: [], autoNameCount: 1 },
             init() { const l = localStorage.getItem('pos_data'); if(l) this.data = JSON.parse(l); },
@@ -75,53 +93,85 @@
             getNextAutoName() { return `未命名商品 ${this.data.autoNameCount}`; },
             incrementAutoName() { this.data.autoNameCount++; this.save(); }
         };
+
         const Utils = {
             formatCurrency: (n) => `¥${parseFloat(n).toFixed(2)}`,
             vibrate: () => { if (navigator.vibrate) navigator.vibrate(50); },
             generateId: () => Math.random().toString(36).substr(2, 9),
             now: () => new Date().toISOString()
         };
+
+        // --- 2. Enhanced Scanning Logic ---
         let html5QrcodeScanner = null;
+        
         const Scanner = {
             start: (elId, cb) => {
                 if(html5QrcodeScanner) Scanner.stop();
                 html5QrcodeScanner = new Html5Qrcode(elId);
-                html5QrcodeScanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, (d) => { Utils.vibrate(); cb(d); }).catch(console.error);
+                const config = { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 };
+                html5QrcodeScanner.start({ facingMode: "environment" }, config, (d) => { 
+                    Utils.vibrate(); 
+                    cb(d); 
+                }).catch(err => {
+                    console.error("Camera Error", err);
+                    Toast.show("无法启动摄像头，请检查权限", "error");
+                    ScannerOverlay.hide();
+                });
             },
-            stop: () => { if(html5QrcodeScanner) html5QrcodeScanner.stop().then(() => { html5QrcodeScanner.clear(); html5QrcodeScanner = null; }).catch(console.error); }
+            stop: () => { 
+                if(html5QrcodeScanner) {
+                    html5QrcodeScanner.stop().then(() => { 
+                        html5QrcodeScanner.clear(); 
+                        html5QrcodeScanner = null; 
+                    }).catch(err => console.error("Stop failed", err));
+                }
+            }
         };
 
-        // --- 视图修正重点 ---
+        // 新增：全屏扫码管理器
+        const ScannerOverlay = {
+            el: document.getElementById('scanner-overlay'),
+            show: (callback) => {
+                ScannerOverlay.el.classList.remove('hidden');
+                lucide.createIcons(); // Ensure X icon renders
+                Scanner.start("fullscreen-reader", (barcode) => {
+                    ScannerOverlay.hide();
+                    callback(barcode);
+                });
+            },
+            hide: () => {
+                Scanner.stop();
+                ScannerOverlay.el.classList.add('hidden');
+            }
+        };
 
-        // View: Cashier (收银) - 布局重构
+        // --- 3. Views ---
+
+        // View: Cashier (收银) - Updated to use ScannerOverlay
         const CashierView = {
             cart: [],
             mode: 'retail',
             render: () => {
-                const header = document.getElementById('header-actions');
-                header.innerHTML = `
+                document.getElementById('header-actions').innerHTML = `
                     <div class="flex bg-slate-100 rounded-lg p-1">
                         <button onclick="CashierView.toggleMode('retail')" class="px-3 py-1 text-xs rounded-md ${CashierView.mode === 'retail' ? 'bg-white shadow text-primary font-bold' : 'text-slate-500'}">零售</button>
                         <button onclick="CashierView.toggleMode('wholesale')" class="px-3 py-1 text-xs rounded-md ${CashierView.mode === 'wholesale' ? 'bg-white shadow text-primary font-bold' : 'text-slate-500'}">批发</button>
                     </div>
                 `;
-
-                // 修复点2: 使用 Flex-Col 布局，让 list 自动撑开中间，Footer 自然处于底部，不使用 fixed
                 return `
                     <div class="flex flex-col h-full w-full">
                         <div class="p-4 bg-white border-b shrink-0">
                             <div class="flex gap-2">
-                                <input type="text" id="cashier-input" placeholder="扫码或输入条码..." class="flex-1 border p-3 rounded-lg shadow-sm bg-gray-50 text-lg" onkeypress="CashierView.handleInput(event)" inputmode="numeric">
-                                <button onclick="CashierView.openScanner()" class="bg-slate-800 text-white w-12 rounded-lg flex items-center justify-center shrink-0">
-                                    <i data-lucide="scan"></i>
+                                <input type="text" placeholder="扫码或输入..." class="flex-1 border p-3 rounded-lg bg-gray-50 text-lg" onkeypress="CashierView.handleInput(event)" inputmode="numeric">
+                                <button onclick="ScannerOverlay.show(CashierView.addToCart)" class="bg-slate-800 text-white w-12 rounded-lg flex items-center justify-center shrink-0 shadow-lg active:bg-slate-700">
+                                    <i data-lucide="scan" class="w-6 h-6"></i>
                                 </button>
                             </div>
                         </div>
-                        
-                        <div id="cart-list" class="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-50">
-                            ${CashierView.cart.length === 0 ? '<div class="h-full flex flex-col items-center justify-center text-slate-300"><i data-lucide="shopping-cart" class="w-12 h-12 mb-2 opacity-50"></i><p>购物车为空</p></div>' : ''}
+                        <div class="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-50">
+                            ${CashierView.cart.length === 0 ? '<div class="h-full flex flex-col items-center justify-center text-slate-300 gap-2"><i data-lucide="shopping-cart" class="w-12 h-12 opacity-50"></i><p>点击右上角扫码</p></div>' : ''}
                             ${CashierView.cart.map((item, index) => `
-                                <div class="bg-white p-3 rounded-lg shadow-sm border border-slate-100 flex justify-between items-center">
+                                <div class="bg-white p-3 rounded-lg shadow-sm border border-slate-100 flex justify-between items-center animate-in fade-in slide-in-from-bottom-2 duration-300">
                                     <div class="flex-1 min-w-0">
                                         <div class="font-medium text-slate-800 truncate pr-2">${item.name}</div>
                                         <div class="text-xs text-slate-400 font-mono">${item.barcode}</div>
@@ -135,26 +185,19 @@
                                 </div>
                             `).join('')}
                         </div>
-
                         <div class="bg-white border-t p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] shrink-0 z-10">
                             <div class="flex justify-between items-end mb-3">
                                 <div class="text-slate-500 text-sm">共 ${CashierView.cart.reduce((a, b) => a + b.qty, 0)} 件</div>
-                                <div class="text-2xl font-bold text-slate-800">
-                                    ${Utils.formatCurrency(CashierView.getTotal())}
-                                </div>
+                                <div class="text-2xl font-bold text-slate-800">${Utils.formatCurrency(CashierView.getTotal())}</div>
                             </div>
-                            <button onclick="CashierView.checkout()" class="w-full bg-green-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-green-600/30 active:scale-95 transition-transform text-lg">
-                                结算收款
-                            </button>
+                            <button onclick="CashierView.checkout()" class="w-full bg-green-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-green-600/30 active:scale-95 transition-transform text-lg">结算收款</button>
                         </div>
                     </div>
                 `;
             },
-            // ... (逻辑保持不变)
             toggleMode: (m) => { CashierView.mode = m; CashierView.recalcCart(); router.refresh(); },
             recalcCart: () => { CashierView.cart = CashierView.cart.map(i => ({...i, price: CashierView.mode === 'retail' ? Store.getProduct(i.barcode)?.retailPrice || 0 : Store.getProduct(i.barcode)?.costPrice || 0})); },
             handleInput: (e) => { if(e.key === 'Enter'){ CashierView.addToCart(e.target.value); e.target.value = ''; } },
-            openScanner: () => { Modal.show(`<div id="c-r" class="h-64 bg-black"></div><button onclick="Modal.hide();Scanner.stop()" class="w-full mt-4 py-3 border rounded-lg">关闭</button>`); Scanner.start("c-r", (b)=>{Scanner.stop();Modal.hide();CashierView.addToCart(b);}); },
             addToCart: (b) => { 
                 const p = Store.getProduct(b); 
                 if(!p) return Toast.show("未找到商品", "error");
@@ -172,7 +215,7 @@
             }
         };
 
-        // View: Inventory Entry (入库) - 滚动优化
+        // View: Entry (入库)
         const EntryView = {
             render: () => `
                 <div class="flex flex-col h-full p-4 overflow-y-auto">
@@ -211,7 +254,7 @@
             }
         };
 
-        // View: Inventory List (管理)
+        // View: Inventory List
         const InventoryView = {
             searchQuery: '',
             render: () => {
@@ -220,7 +263,7 @@
                 return `
                     <div class="flex flex-col h-full">
                         <div class="p-4 bg-white border-b shrink-0">
-                            <input type="text" placeholder="搜索商品..." value="${InventoryView.searchQuery}" oninput="InventoryView.search(this.value)" class="w-full border p-3 rounded-lg bg-gray-50">
+                            <input type="text" placeholder="搜索..." value="${InventoryView.searchQuery}" oninput="InventoryView.search(this.value)" class="w-full border p-3 rounded-lg bg-gray-50">
                         </div>
                         <div class="flex-1 overflow-y-auto p-4 space-y-2">
                             ${ps.map(p => `
@@ -237,7 +280,7 @@
             exp: () => { const ws=XLSX.utils.json_to_sheet(Store.data.products); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "P"); XLSX.writeFile(wb, "Inv.xlsx"); }
         };
 
-        // View: Analytics (报表)
+        // View: Analytics
         const AnalyticsView = { render: () => {
             document.getElementById('header-actions').innerHTML = '';
             const tx = Store.data.transactions;
@@ -247,7 +290,6 @@
                     <div class="bg-gradient-to-br from-blue-600 to-blue-700 text-white p-6 rounded-2xl shadow-lg">
                         <div class="text-blue-100 text-sm mb-1">总销售额</div><div class="text-3xl font-bold">${Utils.formatCurrency(tot)}</div>
                     </div>
-                    <h3 class="font-bold text-slate-700 mt-4">交易记录</h3>
                     <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
                         ${tx.slice().reverse().map(t => `<div class="p-4 border-b flex justify-between"><div><div class="text-xs text-slate-400">${new Date(t.date).toLocaleString()}</div><div class="text-sm mt-1">${t.items.length}件商品</div></div><div class="font-bold text-primary">+${Utils.formatCurrency(t.totalAmount)}</div></div>`).join('')}
                     </div>
@@ -255,12 +297,13 @@
             `;
         }};
 
-        // Router & Global UI
+        // Core System
         const router = {
             current: 'cashier',
             routes: { 'entry': EntryView, 'inventory': InventoryView, 'cashier': CashierView, 'analytics': AnalyticsView },
             navigate: (v) => { 
-                Scanner.stop(); router.current = v; 
+                ScannerOverlay.hide(); // 强制关闭可能打开的扫码层
+                router.current = v; 
                 document.querySelectorAll('.nav-btn').forEach(b => { 
                     const t = b.dataset.target; 
                     b.classList.toggle('text-primary', t===v); 
@@ -273,12 +316,14 @@
                 lucide.createIcons(); 
             }
         };
+
         const Modal = { 
             el: document.getElementById('modal-overlay'), c: document.getElementById('modal-content'),
             show: (h) => { Modal.c.innerHTML=h; Modal.el.classList.remove('hidden'); setTimeout(()=>Modal.c.classList.remove('translate-y-full'),10); },
             hide: () => { Modal.c.classList.add('translate-y-full'); setTimeout(()=>Modal.el.classList.add('hidden'),300); }
         };
-        const Toast = { show: (m, t='s') => { const d=document.createElement('div'); d.className=`fixed top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full shadow-xl text-white text-sm font-bold z-50 transition-all duration-300 transform translate-y-[-20px] opacity-0 ${t==='error'?'bg-red-500':'bg-slate-800'}`; d.textContent=m; document.body.appendChild(d); requestAnimationFrame(()=>d.classList.remove('translate-y-[-20px]','opacity-0')); setTimeout(()=>{d.classList.add('opacity-0');setTimeout(()=>d.remove(),300)},2000); } };
+
+        const Toast = { show: (m, t='s') => { const d=document.createElement('div'); d.className=`fixed top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full shadow-xl text-white text-sm font-bold z-[100] transition-all duration-300 transform translate-y-[-20px] opacity-0 ${t==='error'?'bg-red-500':'bg-slate-800'}`; d.textContent=m; document.body.appendChild(d); requestAnimationFrame(()=>d.classList.remove('translate-y-[-20px]','opacity-0')); setTimeout(()=>{d.classList.add('opacity-0');setTimeout(()=>d.remove(),300)},2000); } };
 
         window.addEventListener('DOMContentLoaded', () => { Store.init(); router.navigate('cashier'); });
     </script>
