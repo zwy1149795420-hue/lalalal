@@ -3,27 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>极速收银系统 (Mobile SPA)</title>
+    <title>云端收银系统 (已连接)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <style>
-        /* 移动端优化 */
         body { -webkit-tap-highlight-color: transparent; }
         .hidden-page { display: none; }
-        /* 扫码区域样式 */
         #interactive.viewport > video { width: 100%; height: auto; border-radius: 0.5rem; }
         #interactive.viewport > canvas { display: none; }
-        .scan-overlay { border: 2px solid #3b82f6; box-shadow: 0 0 0 100vmax rgba(0,0,0,0.5); }
+        /* 加载动画 */
+        .spinner { border: 2px solid #f3f3f3; border-top: 2px solid #3b82f6; border-radius: 50%; width: 12px; height: 12px; animation: spin 1s linear infinite; display: inline-block; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 font-sans h-screen flex flex-col overflow-hidden">
 
+    <script>
+        const CONFIG = {
+            // 您的项目 URL (来自截图)
+            SUPABASE_URL: 'https://ovhjhqfjgwzvfpaiejb.supabase.co', 
+            
+            // 您的 API Key (您刚才提供的)
+            SUPABASE_KEY: 'sb_publishable_klFJUmGYIazBYL7XeIBogA_iN2Gnfwm'
+        };
+    </script>
+
     <header class="bg-white shadow-sm px-4 py-3 flex justify-between items-center z-20">
-        <h1 class="text-lg font-bold text-blue-600" id="page-title">收银台</h1>
-        <div class="text-xs text-gray-500" id="sync-status">本地模式</div>
+        <h1 class="text-lg font-bold text-blue-600">云收银 <span class="text-xs text-gray-400 font-normal">v2.1</span></h1>
+        <div class="flex items-center space-x-2">
+            <div id="sync-loading" class="hidden"><div class="spinner"></div></div>
+            <div class="text-xs text-green-600 font-medium" id="sync-status">初始化...</div>
+        </div>
     </header>
 
     <main class="flex-1 overflow-y-auto pb-24 relative" id="app-container">
@@ -36,57 +50,39 @@
 
             <div class="bg-white p-4 rounded-lg shadow-sm mb-4 text-center border-2 border-dashed border-gray-300 active:bg-gray-50" onclick="Scanner.startCamera('cashier')">
                 <i class="fas fa-barcode text-3xl text-gray-400 mb-2"></i>
-                <p class="text-sm text-gray-500">点击开启摄像头或使用扫码枪</p>
+                <p class="text-sm text-gray-500">点击扫码 / 使用扫码枪</p>
             </div>
 
-            <div id="cart-list" class="space-y-3">
-                </div>
-            
-            <div class="h-20"></div> </section>
+            <div id="cart-list" class="space-y-3"></div>
+            <div class="h-20"></div>
+        </section>
 
         <section id="view-products" class="page-view hidden-page p-4">
             <div class="flex justify-between mb-4">
-                <div class="space-x-2">
-                    <button onclick="ExcelManager.export()" class="bg-green-600 text-white px-3 py-1 rounded text-xs shadow"><i class="fas fa-file-excel"></i> 导出</button>
-                    <button onclick="document.getElementById('file-upload').click()" class="bg-yellow-500 text-white px-3 py-1 rounded text-xs shadow"><i class="fas fa-file-upload"></i> 导入</button>
-                    <input type="file" id="file-upload" class="hidden" onchange="ExcelManager.import(this)">
-                </div>
+                <button onclick="CloudManager.forceSync()" class="bg-gray-600 text-white px-3 py-1 rounded text-xs shadow"><i class="fas fa-sync"></i> 强制同步</button>
                 <button onclick="Router.go('add')" class="bg-blue-600 text-white px-3 py-1 rounded text-xs shadow"><i class="fas fa-plus"></i> 新增</button>
             </div>
-            <div id="product-list" class="space-y-3">
-                </div>
+            <div id="product-list" class="space-y-3"></div>
         </section>
 
         <section id="view-add" class="page-view hidden-page p-4">
              <div class="bg-white p-6 rounded-lg shadow-sm text-center mb-6">
                  <button onclick="Scanner.startCamera('entry')" class="w-32 h-32 rounded-full bg-blue-100 text-blue-600 border-4 border-blue-200 flex flex-col items-center justify-center mx-auto shadow-inner active:scale-95 transition">
                      <i class="fas fa-qrcode text-4xl mb-2"></i>
-                     <span class="text-xs font-bold">点击扫码录入</span>
+                     <span class="text-xs font-bold">扫码录入</span>
                  </button>
-                 <p class="text-xs text-gray-400 mt-4">支持扫码枪直接输入</p>
              </div>
-             <div class="text-center text-gray-500 text-sm">
-                 <p>请先扫描商品条码</p>
-                 <p>若条码已存在将自动进入编辑</p>
-             </div>
+             <p class="text-center text-gray-500 text-sm">请扫描商品条码</p>
         </section>
 
         <section id="view-stats" class="page-view hidden-page p-4">
-            <div class="grid grid-cols-2 gap-4 mb-4">
-                <div class="bg-white p-4 rounded-lg shadow text-center">
-                    <div class="text-xs text-gray-500">今日销售额</div>
-                    <div class="text-xl font-bold text-blue-600" id="stat-total">¥0.00</div>
-                </div>
-                <div class="bg-white p-4 rounded-lg shadow text-center">
-                    <div class="text-xs text-gray-500">今日单数</div>
-                    <div class="text-xl font-bold text-gray-800" id="stat-count">0</div>
-                </div>
+            <div class="bg-white p-4 rounded-lg shadow mb-4">
+                <div class="text-xs text-gray-500">今日云端销售额</div>
+                <div class="text-xl font-bold text-blue-600" id="stat-total">¥0.00</div>
             </div>
-            <h3 class="font-bold text-gray-700 mb-2">最近销售记录</h3>
-            <div id="sales-log" class="space-y-2 text-sm">
-                </div>
+            <h3 class="font-bold text-gray-700 mb-2">最近记录</h3>
+            <div id="sales-log" class="space-y-2 text-sm"></div>
         </section>
-
     </main>
 
     <div id="cashier-bar" class="fixed bottom-16 left-0 right-0 bg-white border-t p-3 flex justify-between items-center shadow-lg z-10">
@@ -96,142 +92,156 @@
         </div>
         <div class="flex space-x-2">
             <button onclick="Cashier.clearCart()" class="text-gray-400 p-2"><i class="fas fa-trash"></i></button>
-            <button onclick="Cashier.checkout()" class="bg-blue-600 text-white px-6 py-2 rounded-full font-bold shadow-lg active:bg-blue-700">结算</button>
+            <button onclick="Cashier.checkout()" class="bg-blue-600 text-white px-6 py-2 rounded-full font-bold shadow-lg">结算</button>
         </div>
     </div>
 
     <nav class="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around py-3 text-xs text-gray-500 z-20 pb-safe">
-        <button onclick="Router.go('cashier')" class="nav-btn flex flex-col items-center text-blue-600" data-target="cashier">
-            <i class="fas fa-cash-register text-xl mb-1"></i> 收银
-        </button>
-        <button onclick="Router.go('add')" class="nav-btn flex flex-col items-center" data-target="add">
-            <i class="fas fa-plus-circle text-xl mb-1"></i> 录入
-        </button>
-        <button onclick="Router.go('products')" class="nav-btn flex flex-col items-center" data-target="products">
-            <i class="fas fa-boxes text-xl mb-1"></i> 商品
-        </button>
-        <button onclick="Router.go('stats')" class="nav-btn flex flex-col items-center" data-target="stats">
-            <i class="fas fa-chart-line text-xl mb-1"></i> 统计
-        </button>
+        <button onclick="Router.go('cashier')" class="nav-btn text-blue-600" data-target="cashier"><i class="fas fa-cash-register text-xl block mb-1"></i>收银</button>
+        <button onclick="Router.go('add')" class="nav-btn" data-target="add"><i class="fas fa-plus-circle text-xl block mb-1"></i>录入</button>
+        <button onclick="Router.go('products')" class="nav-btn" data-target="products"><i class="fas fa-boxes text-xl block mb-1"></i>商品</button>
+        <button onclick="Router.go('stats')" class="nav-btn" data-target="stats"><i class="fas fa-chart-line text-xl block mb-1"></i>统计</button>
     </nav>
 
     <div id="modal-overlay" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden relative">
             
-            <div id="scan-modal-content" class="hidden relative">
-                <div id="interactive" class="viewport w-full h-64 bg-black"></div>
-                <button onclick="Scanner.stopCamera()" class="absolute top-2 right-2 bg-white rounded-full p-2 text-gray-800 shadow"><i class="fas fa-times"></i></button>
-                <div class="absolute bottom-4 left-0 right-0 text-center text-white text-xs text-shadow">对准条形码</div>
+            <div id="scan-modal-content" class="hidden relative h-64 bg-black">
+                <div id="interactive" class="viewport w-full h-full"></div>
+                <button onclick="Scanner.stopCamera()" class="absolute top-2 right-2 bg-white rounded-full p-2"><i class="fas fa-times"></i></button>
             </div>
 
             <div id="product-form-content" class="hidden p-6">
-                <h3 class="text-lg font-bold mb-4">商品信息</h3>
+                <h3 class="text-lg font-bold mb-4">编辑商品</h3>
                 <div class="space-y-4">
-                    <div>
-                        <label class="text-xs text-gray-500">条形码</label>
-                        <input type="text" id="input-barcode" class="w-full border-b-2 border-gray-200 focus:border-blue-500 outline-none py-1 bg-gray-50 px-2" readonly>
-                    </div>
-                    <div>
-                        <label class="text-xs text-gray-500">商品名称 (可选)</label>
-                        <input type="text" id="input-name" placeholder="留空自动生成 '未命名X'" class="w-full border-b-2 border-gray-200 focus:border-blue-500 outline-none py-1">
-                    </div>
+                    <input type="text" id="input-barcode" class="w-full border-b bg-gray-50 px-2 py-1" readonly>
+                    <input type="text" id="input-name" placeholder="商品名称" class="w-full border-b py-1">
                     <div class="flex space-x-4">
-                        <div class="flex-1">
-                            <label class="text-xs text-gray-500">批发价</label>
-                            <input type="number" id="input-cost" step="0.01" class="w-full border-b-2 border-gray-200 focus:border-blue-500 outline-none py-1">
-                        </div>
-                        <div class="flex-1">
-                            <label class="text-xs text-gray-500">零售价</label>
-                            <input type="number" id="input-price" step="0.01" class="w-full border-b-2 border-gray-200 focus:border-blue-500 outline-none py-1">
-                        </div>
+                        <input type="number" id="input-cost" placeholder="批发价" class="w-full border-b py-1">
+                        <input type="number" id="input-price" placeholder="零售价" class="w-full border-b py-1">
                     </div>
                 </div>
                 <div class="mt-6 flex space-x-3">
-                    <button onclick="UI.closeModal()" class="flex-1 py-2 rounded-lg bg-gray-100 text-gray-600">取消</button>
-                    <button onclick="ProductManager.saveForm()" class="flex-1 py-2 rounded-lg bg-blue-600 text-white font-bold">保存</button>
+                    <button onclick="UI.closeModal()" class="flex-1 py-2 bg-gray-100 rounded">取消</button>
+                    <button onclick="ProductManager.saveForm()" class="flex-1 py-2 bg-blue-600 text-white rounded">保存同步</button>
                 </div>
             </div>
 
         </div>
     </div>
-
-    <div id="toast" class="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black bg-opacity-80 text-white px-4 py-2 rounded-lg text-sm hidden z-50 transition-opacity">
-        提示信息
-    </div>
+    <div id="toast" class="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black bg-opacity-80 text-white px-4 py-2 rounded-lg text-sm hidden z-50"></div>
 
 <script>
-/**
- * 核心架构：
- * 1. DataStore: 数据持久化与管理
- * 2. Router: 视图切换
- * 3. ProductManager: 商品增删改查逻辑
- * 4. Cashier: 收银逻辑
- * 5. Scanner: 扫码相关（摄像头+枪）
- * 6. UI: 渲染与交互辅助
- */
+// --- 0. Supabase & 云端同步层 ---
+let supabase = null;
 
-// --- 1. 数据层 ---
+const CloudManager = {
+    init: () => {
+        try {
+            supabase = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+            CloudManager.pullProducts();
+            CloudManager.pullSales(); // 新增：拉取销售记录
+        } catch (e) {
+            UI.updateStatus('连接配置错误', 'error');
+            console.error(e);
+        }
+    },
+
+    // 拉取所有商品
+    pullProducts: async () => {
+        UI.setLoading(true);
+        UI.updateStatus('同步商品...');
+        
+        const { data, error } = await supabase.from('products').select('*');
+        
+        if (error) {
+            console.error(error);
+            UI.updateStatus('同步商品失败', 'error');
+        } else {
+            localStorage.setItem('products', JSON.stringify(data));
+            if(Router.current === 'products') ProductManager.renderList();
+            UI.updateStatus('云端已连接', 'success');
+        }
+        UI.setLoading(false);
+    },
+
+    // 拉取今日销售
+    pullSales: async () => {
+        const { data, error } = await supabase.from('sales').select('*').order('created_at', { ascending: false }).limit(20);
+        if(!error) {
+            localStorage.setItem('sales', JSON.stringify(data.map(d => d.data)));
+            if(Router.current === 'stats') StatsManager.render();
+        }
+    },
+
+    // 上传单个商品 (新增或更新)
+    upsertProduct: async (product) => {
+        UI.updateStatus('正在上传...');
+        // 移除本地临时字段，只上传数据库需要的
+        const payload = {
+            barcode: product.barcode,
+            name: product.name,
+            cost: product.cost,
+            price: product.price,
+            updated_at: product.updated_at
+        };
+
+        const { error } = await supabase.from('products').upsert(payload);
+        
+        if (error) {
+            UI.toast('上传失败: ' + error.message, 'error');
+            UI.updateStatus('上传失败', 'error');
+        } else {
+            UI.updateStatus('已保存至云端', 'success');
+        }
+    },
+
+    // 上传销售记录
+    pushSale: async (saleRecord) => {
+        UI.updateStatus('正在结算...');
+        const { error } = await supabase.from('sales').insert({
+            id: saleRecord.id.toString(),
+            data: saleRecord
+        });
+        if(error) {
+            UI.toast('云端记录失败', 'error');
+        } else {
+            UI.updateStatus('销售已记录', 'success');
+            CloudManager.pullSales(); // 刷新统计
+        }
+    },
+    
+    forceSync: () => {
+        CloudManager.pullProducts();
+        CloudManager.pullSales();
+    }
+};
+
+// --- 1. 数据层 (Local + Cloud) ---
 const DataStore = {
     getProducts: () => JSON.parse(localStorage.getItem('products') || '[]'),
-    saveProducts: (data) => {
-        localStorage.setItem('products', JSON.stringify(data));
-        // TODO: 预留云端同步接口
-        // fetch('/api/sync', { method: 'POST', body: JSON.stringify(data) });
-    },
     getSales: () => JSON.parse(localStorage.getItem('sales') || '[]'),
-    addSale: (sale) => {
-        const sales = DataStore.getSales();
-        sales.unshift(sale); // 最新的在前
-        localStorage.setItem('sales', JSON.stringify(sales));
-    },
-    findProduct: (barcode) => {
-        return DataStore.getProducts().find(p => p.barcode === barcode);
-    }
-};
-
-// --- 2. 路由与视图 ---
-const Router = {
-    current: 'cashier',
-    go: (pageId) => {
-        // 隐藏所有页面
-        document.querySelectorAll('.page-view').forEach(el => el.classList.add('hidden-page'));
-        // 显示目标页面
-        document.getElementById(`view-${pageId}`).classList.remove('hidden-page');
-        
-        // 更新底部导航状态
-        document.querySelectorAll('.nav-btn').forEach(btn => {
-            btn.classList.remove('text-blue-600');
-            if(btn.dataset.target === pageId) btn.classList.add('text-blue-600');
-        });
-        
-        // 更新标题
-        const titles = { cashier: '收银台', add: '扫码录入', products: '商品管理', stats: '销售统计' };
-        document.getElementById('page-title').innerText = titles[pageId];
-
-        // 视图特定逻辑
-        if (pageId === 'cashier') {
-            document.getElementById('cashier-bar').classList.remove('hidden');
-            Cashier.renderCart(); // 刷新购物车视图
-        } else {
-            document.getElementById('cashier-bar').classList.add('hidden');
+    
+    // 保存逻辑：先存本地（为了快），再推云端
+    saveProducts: (products, changedProduct = null) => {
+        localStorage.setItem('products', JSON.stringify(products));
+        if (changedProduct) {
+            CloudManager.upsertProduct(changedProduct);
         }
+    },
 
-        if (pageId === 'products') ProductManager.renderList();
-        if (pageId === 'stats') StatsManager.render();
-        
-        // 自动聚焦处理（如果是录入页，重置扫码枪缓冲区逻辑）
-        Router.current = pageId;
-    }
+    findProduct: (barcode) => DataStore.getProducts().find(p => p.barcode === barcode)
 };
 
-// --- 3. 商品管理 ---
+// --- 2. 业务逻辑 (商品管理) ---
 const ProductManager = {
     renderList: () => {
         const list = DataStore.getProducts();
         const container = document.getElementById('product-list');
-        container.innerHTML = list.length === 0 ? '<div class="text-center text-gray-400 mt-10">暂无商品</div>' : '';
+        container.innerHTML = list.length === 0 ? '<div class="text-center text-gray-400 mt-10">暂无数据，请在“录入”页添加</div>' : '';
 
-        list.forEach(p => {
+        // 按更新时间降序
+        list.sort((a,b) => (b.updated_at || 0) - (a.updated_at || 0)).forEach(p => {
             const el = document.createElement('div');
             el.className = 'bg-white p-3 rounded-lg shadow-sm flex justify-between items-center';
             el.innerHTML = `
@@ -239,42 +249,28 @@ const ProductManager = {
                     <div class="font-bold">${p.name}</div>
                     <div class="text-xs text-gray-400">${p.barcode}</div>
                     <div class="text-xs mt-1">
-                        <span class="text-green-600 mr-2">零: ¥${p.price}</span>
-                        <span class="text-gray-500">批: ¥${p.cost}</span>
+                        <span class="text-green-600 mr-2 font-bold">¥${p.price}</span>
+                        <span class="text-gray-400">进:¥${p.cost}</span>
                     </div>
                 </div>
-                <div class="space-x-2">
-                    <button onclick="ProductManager.edit('${p.barcode}')" class="text-blue-500 p-2"><i class="fas fa-edit"></i></button>
-                    <button onclick="ProductManager.remove('${p.barcode}')" class="text-red-500 p-2"><i class="fas fa-trash"></i></button>
-                </div>
+                <button onclick="ProductManager.edit('${p.barcode}')" class="text-blue-500 px-3 py-2"><i class="fas fa-edit"></i></button>
             `;
             container.appendChild(el);
         });
     },
-
-    // 生成未命名名称
+    
     generateName: () => {
         const products = DataStore.getProducts();
-        const unnamed = products.filter(p => p.name.startsWith('未命名'));
-        if (unnamed.length === 0) return '未命名';
-        
-        let maxNum = 0;
-        unnamed.forEach(p => {
-            const num = parseInt(p.name.replace('未命名', '')) || 0;
-            if (num > maxNum) maxNum = num;
-        });
-        return `未命名${maxNum + 1}`;
+        const count = products.filter(p => p.name && p.name.startsWith('未命名')).length;
+        return `未命名${count + 1}`;
     },
 
-    // 打开编辑/新增弹窗
-    openForm: (barcode, isEdit = false) => {
+    openForm: (barcode) => {
         const product = DataStore.findProduct(barcode);
-        
         document.getElementById('input-barcode').value = barcode;
         document.getElementById('input-name').value = product ? product.name : '';
         document.getElementById('input-cost').value = product ? product.cost : '';
         document.getElementById('input-price').value = product ? product.price : '';
-        
         UI.showModal('product-form');
     },
 
@@ -284,346 +280,248 @@ const ProductManager = {
         const cost = parseFloat(document.getElementById('input-cost').value) || 0;
         const price = parseFloat(document.getElementById('input-price').value) || 0;
 
-        if (!barcode) return UI.toast('条码错误');
-
         const products = DataStore.getProducts();
-        const existingIndex = products.findIndex(p => p.barcode === barcode);
+        const idx = products.findIndex(p => p.barcode === barcode);
         
-        const name = nameInput || (existingIndex >= 0 ? products[existingIndex].name : ProductManager.generateName());
+        // 如果是新商品且没填名字，自动生成
+        const name = nameInput || (idx >= 0 ? products[idx].name : ProductManager.generateName());
 
-        const newProduct = { barcode, name, cost, price, updated: Date.now() };
+        const newProduct = { barcode, name, cost, price, updated_at: Date.now() };
 
-        if (existingIndex >= 0) {
-            products[existingIndex] = newProduct;
-        } else {
-            products.push(newProduct);
-        }
+        if (idx >= 0) products[idx] = newProduct;
+        else products.push(newProduct);
 
-        DataStore.saveProducts(products);
+        DataStore.saveProducts(products, newProduct); // 触发云端上传
+        
         UI.closeModal();
-        UI.toast('保存成功');
-
-        // 逻辑要求：保存后如果是录入模式，自动回到扫码
-        if (Router.current === 'add') {
-            setTimeout(() => Scanner.startCamera('entry'), 500);
-        } else {
-            ProductManager.renderList();
-        }
+        UI.toast('已保存');
+        if (Router.current === 'add') setTimeout(() => Scanner.startCamera('entry'), 500);
+        else ProductManager.renderList();
     },
 
-    edit: (barcode) => ProductManager.openForm(barcode, true),
-    
-    remove: (barcode) => {
-        if(!confirm('确定删除?')) return;
-        const products = DataStore.getProducts().filter(p => p.barcode !== barcode);
-        DataStore.saveProducts(products);
-        ProductManager.renderList();
-    }
+    edit: (code) => ProductManager.openForm(code)
 };
 
-// --- 4. 收银逻辑 ---
+// --- 3. 收银逻辑 ---
 const Cashier = {
     cart: [],
-    priceMode: 'retail', // 'retail' or 'wholesale'
-
+    priceMode: 'retail',
+    
     setPriceMode: (mode) => {
         Cashier.priceMode = mode;
-        const btnR = document.getElementById('btn-retail');
-        const btnW = document.getElementById('btn-wholesale');
-        
-        if (mode === 'retail') {
-            btnR.className = 'flex-1 py-2 text-sm rounded-md bg-blue-600 text-white transition';
-            btnW.className = 'flex-1 py-2 text-sm rounded-md text-gray-600 transition';
-        } else {
-            btnW.className = 'flex-1 py-2 text-sm rounded-md bg-purple-600 text-white transition';
-            btnR.className = 'flex-1 py-2 text-sm rounded-md text-gray-600 transition';
-        }
+        document.getElementById('btn-retail').className = mode === 'retail' ? 'flex-1 py-2 text-sm rounded-md bg-blue-600 text-white transition' : 'flex-1 py-2 text-sm rounded-md text-gray-600 transition';
+        document.getElementById('btn-wholesale').className = mode === 'wholesale' ? 'flex-1 py-2 text-sm rounded-md bg-purple-600 text-white transition' : 'flex-1 py-2 text-sm rounded-md text-gray-600 transition';
         Cashier.renderCart();
     },
 
     addToCart: (barcode) => {
         const product = DataStore.findProduct(barcode);
-        if (!product) {
-            UI.toast('商品不存在，请先录入', 'error');
-            return; // 不在收银模式打断去录入，保持流程
-        }
-
-        const existing = Cashier.cart.find(item => item.barcode === barcode);
-        if (existing) {
-            existing.qty += 1;
-        } else {
-            Cashier.cart.push({ ...product, qty: 1 });
-        }
+        if (!product) return UI.toast('未找到商品，请先录入', 'error');
+        
+        const existing = Cashier.cart.find(i => i.barcode === barcode);
+        if (existing) existing.qty++;
+        else Cashier.cart.push({ ...product, qty: 1 });
+        
         UI.toast(`已添加: ${product.name}`);
         Cashier.renderCart();
     },
 
-    adjustQty: (barcode, delta) => {
+    adjustQty: (barcode, d) => {
         const item = Cashier.cart.find(i => i.barcode === barcode);
         if (item) {
-            item.qty += delta;
-            if (item.qty <= 0) {
-                Cashier.cart = Cashier.cart.filter(i => i.barcode !== barcode);
-            }
+            item.qty += d;
+            if (item.qty <= 0) Cashier.cart = Cashier.cart.filter(i => i.barcode !== barcode);
             Cashier.renderCart();
         }
     },
 
-    clearCart: () => {
-        if(confirm('清空购物车?')) {
-            Cashier.cart = [];
-            Cashier.renderCart();
+    clearCart: () => { 
+        if(confirm('确定清空购物车?')) {
+            Cashier.cart = []; 
+            Cashier.renderCart(); 
         }
     },
 
     renderCart: () => {
-        const container = document.getElementById('cart-list');
-        container.innerHTML = '';
-        let totalQty = 0;
-        let totalAmount = 0;
-
+        const div = document.getElementById('cart-list');
+        div.innerHTML = '';
+        let total = 0, count = 0;
+        
         Cashier.cart.forEach(item => {
-            const unitPrice = Cashier.priceMode === 'retail' ? item.price : item.cost;
-            const subtotal = unitPrice * item.qty;
-            totalQty += item.qty;
-            totalAmount += subtotal;
-
+            const price = Cashier.priceMode === 'retail' ? item.price : item.cost;
+            const subtotal = price * item.qty;
+            total += subtotal;
+            count += item.qty;
+            
             const el = document.createElement('div');
             el.className = 'bg-white p-3 rounded-lg shadow-sm flex justify-between items-center';
             el.innerHTML = `
                 <div class="flex-1">
-                    <div class="font-bold text-gray-800">${item.name}</div>
-                    <div class="text-xs text-gray-400">${item.barcode}</div>
-                    <div class="text-xs text-blue-600 mt-1">单价: ¥${unitPrice}</div>
+                    <div class="font-bold">${item.name}</div>
+                    <div class="text-blue-600 text-xs">单价: ¥${price}</div>
                 </div>
-                <div class="flex items-center space-x-3">
-                    <button onclick="Cashier.adjustQty('${item.barcode}', -1)" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center font-bold text-gray-600">-</button>
+                <div class="flex items-center space-x-2">
+                    <button onclick="Cashier.adjustQty('${item.barcode}', -1)" class="w-8 h-8 bg-gray-100 rounded-full font-bold text-gray-600">-</button>
                     <span class="w-6 text-center font-bold">${item.qty}</span>
-                    <button onclick="Cashier.adjustQty('${item.barcode}', 1)" class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-600">+</button>
+                    <button onclick="Cashier.adjustQty('${item.barcode}', 1)" class="w-8 h-8 bg-blue-100 rounded-full text-blue-600 font-bold">+</button>
                 </div>
             `;
-            container.appendChild(el);
+            div.appendChild(el);
         });
-
-        document.getElementById('cart-count').innerText = totalQty;
-        document.getElementById('cart-total').innerText = totalAmount.toFixed(2);
+        document.getElementById('cart-count').innerText = count;
+        document.getElementById('cart-total').innerText = total.toFixed(2);
     },
 
     checkout: () => {
         if (Cashier.cart.length === 0) return UI.toast('购物车为空');
-        
         const total = parseFloat(document.getElementById('cart-total').innerText);
-        const record = {
-            id: Date.now(),
-            date: new Date().toISOString(),
-            items: [...Cashier.cart],
-            total: total,
-            mode: Cashier.priceMode
+        const record = { 
+            id: Date.now(), 
+            items: Cashier.cart.map(i => ({n: i.name, b: i.barcode, q: i.qty, p: (Cashier.priceMode === 'retail' ? i.price : i.cost)})), 
+            total, 
+            mode: Cashier.priceMode, 
+            date: new Date().toISOString() 
         };
-
-        DataStore.addSale(record);
+        
+        CloudManager.pushSale(record);
+        
         Cashier.cart = [];
         Cashier.renderCart();
         UI.toast(`结算成功 ¥${total}`);
     }
 };
 
-// --- 5. 扫码逻辑 (核心) ---
-const Scanner = {
-    buffer: '',
-    lastKeyTime: 0,
-    
-    // 处理扫码结果
-    handleScan: (code) => {
-        console.log("Scanned:", code);
-        Scanner.stopCamera(); // 停止摄像头
+const StatsManager = {
+    render: () => {
+        const sales = DataStore.getSales();
+        // 计算今日总额
+        const todayStr = new Date().toDateString();
+        const todaySales = sales.filter(s => new Date(s.date).toDateString() === todayStr);
+        const total = todaySales.reduce((acc, cur) => acc + cur.total, 0);
 
-        // 根据当前页面决定逻辑
+        document.getElementById('stat-total').innerText = `¥${total.toFixed(2)}`;
+
+        const logContainer = document.getElementById('sales-log');
+        logContainer.innerHTML = '';
+        sales.forEach(s => {
+            const el = document.createElement('div');
+            el.className = 'flex justify-between border-b pb-2 mb-2';
+            el.innerHTML = `
+                <span class="text-gray-500 text-xs">${new Date(s.date).toLocaleTimeString()}</span>
+                <span class="font-bold text-sm">¥${s.total.toFixed(2)}</span>
+            `;
+            logContainer.appendChild(el);
+        });
+    }
+};
+
+// --- 4. 扫码与路由 ---
+const Scanner = {
+    buffer: '', lastKeyTime: 0, _scanning: false,
+    handleScan: (code) => {
+        Scanner.stopCamera();
         if (Router.current === 'add') {
-            const product = DataStore.findProduct(code);
-            if (product) {
-                // 已存在 -> 直接编辑 (不显示添加成功，直接进详情)
-                ProductManager.edit(code);
-            } else {
-                // 不存在 -> 打开录入表单
-                ProductManager.openForm(code);
-            }
-        } else if (Router.current === 'cashier') {
+            const p = DataStore.findProduct(code);
+            p ? ProductManager.edit(code) : ProductManager.openForm(code);
+        } else {
             Cashier.addToCart(code);
         }
     },
-
-    // 摄像头扫码 (QuaggaJS)
-    startCamera: (sourcePage) => {
-        // sourcePage: 'entry' or 'cashier'
+    startCamera: (page) => {
         UI.showModal('scan');
-        
         Quagga.init({
-            inputStream : {
-                name : "Live",
-                type : "LiveStream",
-                target: document.querySelector('#interactive')
-            },
-            decoder : {
-                readers : ["ean_reader", "code_128_reader", "upc_reader"] // 常用条码
-            }
-        }, function(err) {
+            inputStream: { name: "Live", type: "LiveStream", target: document.querySelector('#interactive') },
+            decoder: { readers: ["ean_reader", "code_128_reader", "upc_reader"] }
+        }, (err) => {
             if (err) {
-                console.log(err);
-                UI.toast("摄像头启动失败", "error");
+                UI.toast("相机失败: 请确保使用HTTPS", "error");
                 UI.closeModal();
                 return;
             }
             Quagga.start();
         });
-
-        Quagga.onDetected((data) => {
-            // 防抖
+        Quagga.onDetected((d) => {
             if (Scanner._scanning) return;
             Scanner._scanning = true;
-            
-            const code = data.codeResult.code;
-            Scanner.handleScan(code);
-            
-            setTimeout(() => { Scanner._scanning = false; }, 1000);
+            Scanner.handleScan(d.codeResult.code);
+            setTimeout(() => Scanner._scanning = false, 1000);
         });
     },
-
-    stopCamera: () => {
-        Quagga.stop();
-        UI.closeModal();
-    },
-
-    // 扫码枪监听 (模拟键盘输入)
+    stopCamera: () => { if(Quagga){try{Quagga.stop()}catch(e){}} UI.closeModal(); },
     initGunListener: () => {
         document.addEventListener('keydown', (e) => {
-            // 如果焦点在输入框，不拦截
             if (e.target.tagName === 'INPUT') return;
-
-            const currentTime = Date.now();
-            if (currentTime - Scanner.lastKeyTime > 100) {
-                Scanner.buffer = ''; // 超时重置
-            }
-            Scanner.lastKeyTime = currentTime;
-
+            const now = Date.now();
+            if (now - Scanner.lastKeyTime > 100) Scanner.buffer = '';
+            Scanner.lastKeyTime = now;
             if (e.key === 'Enter') {
-                if (Scanner.buffer.length > 2) {
-                    Scanner.handleScan(Scanner.buffer);
-                }
+                if (Scanner.buffer.length > 2) Scanner.handleScan(Scanner.buffer);
                 Scanner.buffer = '';
-            } else if (e.key.length === 1) {
-                Scanner.buffer += e.key;
-            }
+            } else if (e.key.length === 1) Scanner.buffer += e.key;
         });
     }
 };
 
-// --- 6. 统计与Excel ---
-const ExcelManager = {
-    export: () => {
-        const data = DataStore.getProducts();
-        const ws = XLSX.utils.json_to_sheet(data);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "商品库");
-        XLSX.writeFile(wb, "products_backup.xlsx");
-    },
-    import: (input) => {
-        const file = input.files[0];
-        if(!file) return;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, {type: 'array'});
-            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-            const jsonData = XLSX.utils.sheet_to_json(firstSheet);
-            
-            // 简单的合并策略：条码相同覆盖，不同新增
-            const current = DataStore.getProducts();
-            jsonData.forEach(item => {
-                // 确保字段映射
-                const newItem = {
-                    barcode: item['barcode'] || item['条形码'],
-                    name: item['name'] || item['商品名称'] || '未命名',
-                    cost: item['cost'] || item['批发价'] || 0,
-                    price: item['price'] || item['零售价'] || 0,
-                    updated: Date.now()
-                };
-                if(newItem.barcode) {
-                    const idx = current.findIndex(p => p.barcode == newItem.barcode);
-                    if(idx >= 0) current[idx] = newItem;
-                    else current.push(newItem);
-                }
-            });
-            DataStore.saveProducts(current);
+const Router = {
+    current: 'cashier',
+    go: (id) => {
+        document.querySelectorAll('.page-view').forEach(e => e.classList.add('hidden-page'));
+        document.getElementById(`view-${id}`).classList.remove('hidden-page');
+        document.querySelectorAll('.nav-btn').forEach(b => {
+            b.classList.remove('text-blue-600');
+            if(b.dataset.target === id) b.classList.add('text-blue-600');
+        });
+        if (id === 'cashier') {
+            document.getElementById('cashier-bar').classList.remove('hidden');
+            Cashier.renderCart();
+        } else {
+            document.getElementById('cashier-bar').classList.add('hidden');
+        }
+        if (id === 'products') {
             ProductManager.renderList();
-            UI.toast(`导入 ${jsonData.length} 条数据`);
-        };
-        reader.readAsArrayBuffer(file);
+            CloudManager.pullProducts(); // 进页面自动刷新
+        }
+        if (id === 'stats') {
+            CloudManager.pullSales();
+            StatsManager.render();
+        }
+        Router.current = id;
     }
 };
 
-const StatsManager = {
-    render: () => {
-        const sales = DataStore.getSales();
-        // 简单计算今日
-        const todayStr = new Date().toDateString();
-        const todaySales = sales.filter(s => new Date(s.date).toDateString() === todayStr);
-        
-        const total = todaySales.reduce((sum, s) => sum + s.total, 0);
-        
-        document.getElementById('stat-total').innerText = `¥${total.toFixed(2)}`;
-        document.getElementById('stat-count').innerText = todaySales.length;
-
-        const logContainer = document.getElementById('sales-log');
-        logContainer.innerHTML = '';
-        sales.slice(0, 20).forEach(s => { // 只显示最近20条
-            const div = document.createElement('div');
-            div.className = 'flex justify-between border-b pb-2';
-            div.innerHTML = `
-                <span class="text-gray-500">${new Date(s.date).toLocaleTimeString()}</span>
-                <span class="font-bold">¥${s.total.toFixed(2)}</span>
-            `;
-            logContainer.appendChild(div);
-        });
-    }
-};
-
-// --- 7. UI 工具 ---
 const UI = {
-    showModal: (type) => {
+    showModal: (t) => {
         document.getElementById('modal-overlay').classList.remove('hidden');
         document.getElementById('scan-modal-content').classList.add('hidden');
         document.getElementById('product-form-content').classList.add('hidden');
-        
-        if(type === 'scan') document.getElementById('scan-modal-content').classList.remove('hidden');
-        if(type === 'product-form') document.getElementById('product-form-content').classList.remove('hidden');
+        if(t === 'scan') document.getElementById('scan-modal-content').classList.remove('hidden');
+        if(t === 'product-form') document.getElementById('product-form-content').classList.remove('hidden');
     },
     closeModal: () => {
         document.getElementById('modal-overlay').classList.add('hidden');
-        if(Quagga) Quagga.stop();
+        try{ Quagga.stop() }catch(e){}
     },
-    toast: (msg, type='info') => {
-        const t = document.getElementById('toast');
-        t.innerText = msg;
-        t.style.backgroundColor = type === 'error' ? 'rgba(220, 38, 38, 0.9)' : 'rgba(0, 0, 0, 0.8)';
-        t.classList.remove('hidden');
-        setTimeout(() => t.classList.add('hidden'), 2000);
+    toast: (m, t='info') => {
+        const el = document.getElementById('toast');
+        el.innerText = m;
+        el.className = `fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 px-4 py-2 rounded-lg text-sm z-50 transition-opacity ${t==='error'?'bg-red-600 text-white':'bg-black bg-opacity-80 text-white'}`;
+        el.classList.remove('hidden');
+        setTimeout(() => el.classList.add('hidden'), 2000);
+    },
+    setLoading: (show) => {
+        document.getElementById('sync-loading').className = show ? 'block' : 'hidden';
+    },
+    updateStatus: (text, type='normal') => {
+        const el = document.getElementById('sync-status');
+        el.innerText = text;
+        el.className = `text-xs font-medium ${type === 'error' ? 'text-red-500' : 'text-green-600'}`;
     }
 };
 
-// --- 初始化 ---
-(function init() {
-    Scanner.initGunListener();
-    Router.go('cashier'); // 默认进收银台
-    
-    // 初始化一些测试数据（如果为空）
-    if(DataStore.getProducts().length === 0) {
-        DataStore.saveProducts([
-            {barcode: "690123456789", name: "测试可乐", cost: 2.00, price: 3.50, updated: Date.now()}
-        ]);
-    }
-})();
-
+// 初始化
+Scanner.initGunListener();
+Router.go('cashier');
+CloudManager.init();
 </script>
 </body>
 </html>
