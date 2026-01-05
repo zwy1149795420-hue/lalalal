@@ -1,0 +1,484 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>极速移动收银系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+    <style>
+        /* 隐藏滚动条但保留功能 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* 扫描线动画 */
+        @keyframes scan {
+            0% { top: 10%; opacity: 0; }
+            50% { opacity: 1; }
+            100% { top: 90%; opacity: 0; }
+        }
+        .scan-line {
+            position: absolute;
+            width: 80%;
+            height: 2px;
+            background: #3b82f6;
+            left: 10%;
+            animation: scan 2s infinite linear;
+            box-shadow: 0 0 4px #3b82f6;
+        }
+        
+        /* 解决移动端底部安全区 */
+        body { padding-bottom: env(safe-area-inset-bottom); }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 h-screen w-screen overflow-hidden select-none">
+
+    <div id="app" class="flex flex-col h-full w-full relative">
+
+        <section id="view-pos" class="view-section flex-1 flex flex-col h-full hidden">
+            <header class="bg-white p-4 shadow-sm z-10 flex justify-between items-center">
+                <h1 class="text-xl font-bold text-gray-800">移动收银</h1>
+                <label class="inline-flex items-center cursor-pointer">
+                    <span class="mr-3 text-sm font-medium text-gray-600" id="price-mode-label">零售价</span>
+                    <div class="relative">
+                        <input type="checkbox" id="price-toggle" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </div>
+                </label>
+            </header>
+
+            <div id="cart-list" class="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar pb-32">
+                <div class="text-center text-gray-400 mt-20">
+                    <i data-lucide="shopping-cart" class="w-12 h-12 mx-auto mb-2 opacity-50"></i>
+                    <p>请点击下方扫码开始收银</p>
+                </div>
+            </div>
+
+            <div class="absolute bottom-[70px] left-0 w-full bg-white shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] p-4 rounded-t-2xl z-20">
+                <div class="flex justify-between items-end mb-3">
+                    <div class="text-sm text-gray-500">共 <span id="total-count" class="font-bold text-gray-800">0</span> 件</div>
+                    <div class="text-right">
+                        <div class="text-xs text-gray-400">应付总额</div>
+                        <div class="text-2xl font-bold text-blue-600">¥<span id="total-amount">0.00</span></div>
+                    </div>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="App.clearCart()" class="px-4 py-3 rounded-xl bg-gray-100 text-gray-600 active:bg-gray-200">
+                        <i data-lucide="trash-2" class="w-5 h-5"></i>
+                    </button>
+                    <button onclick="App.startScanner('pos')" class="flex-1 bg-blue-600 text-white rounded-xl py-3 font-bold shadow-lg shadow-blue-200 active:scale-[0.98] transition-transform flex justify-center items-center gap-2">
+                        <i data-lucide="scan-line" class="w-5 h-5"></i> 扫码收银
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <section id="view-add" class="view-section flex-1 flex flex-col h-full hidden bg-gray-900">
+            <div class="flex-1 flex flex-col justify-center items-center relative">
+                <div id="reader-add" class="w-full h-full absolute inset-0 object-cover"></div>
+                
+                <div class="z-10 text-center text-white/80 pointer-events-none">
+                    <div class="w-64 h-64 border-2 border-blue-500 rounded-xl relative mx-auto mb-4 bg-white/5 backdrop-blur-sm">
+                        <div class="scan-line"></div>
+                        <div class="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-blue-500 -mt-1 -ml-1"></div>
+                        <div class="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-blue-500 -mt-1 -mr-1"></div>
+                        <div class="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-blue-500 -mb-1 -ml-1"></div>
+                        <div class="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-blue-500 -mb-1 -mr-1"></div>
+                    </div>
+                    <p class="text-sm font-medium tracking-wide">将条形码放入框内</p>
+                    <p class="text-xs mt-2 opacity-60">识别成功后自动弹出录入窗口</p>
+                </div>
+
+                <button id="btn-start-add-scan" onclick="App.startScanner('add')" class="z-20 absolute bottom-32 bg-white text-gray-900 px-6 py-3 rounded-full font-bold shadow-lg hidden">
+                    开启摄像头
+                </button>
+            </div>
+        </section>
+
+        <section id="view-inventory" class="view-section flex-1 flex flex-col h-full hidden">
+            <div class="bg-white p-4 shadow-sm sticky top-0 z-10">
+                <h1 class="text-xl font-bold mb-3">库存管理</h1>
+                <div class="relative">
+                    <i data-lucide="search" class="absolute left-3 top-3 text-gray-400 w-5 h-5"></i>
+                    <input type="text" id="search-input" placeholder="搜索名称或条码..." 
+                           class="w-full pl-10 pr-4 py-3 bg-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm">
+                </div>
+            </div>
+
+            <div id="product-list" class="flex-1 overflow-y-auto p-4 space-y-3 pb-24">
+                </div>
+        </section>
+
+        <nav class="bg-white border-t border-gray-100 h-[60px] flex justify-around items-center z-50 absolute bottom-0 w-full text-xs font-medium text-gray-400">
+            <button onclick="App.switchView('pos')" class="nav-btn w-full h-full flex flex-col items-center justify-center gap-1 hover:bg-gray-50 active:text-blue-600" data-target="view-pos">
+                <i data-lucide="shopping-bag" class="w-6 h-6"></i>
+                <span>收银台</span>
+            </button>
+            <button onclick="App.switchView('add')" class="nav-btn w-full h-full flex flex-col items-center justify-center gap-1 hover:bg-gray-50 active:text-blue-600" data-target="view-add">
+                <div class="bg-blue-600 text-white p-3 rounded-full -mt-6 shadow-lg shadow-blue-200 border-4 border-gray-100">
+                    <i data-lucide="plus" class="w-6 h-6"></i>
+                </div>
+                <span class="mt-1">入库</span>
+            </button>
+            <button onclick="App.switchView('inventory')" class="nav-btn w-full h-full flex flex-col items-center justify-center gap-1 hover:bg-gray-50 active:text-blue-600" data-target="view-inventory">
+                <i data-lucide="package" class="w-6 h-6"></i>
+                <span>库存</span>
+            </button>
+        </nav>
+
+        <div id="scanner-modal" class="fixed inset-0 bg-black z-[60] hidden">
+            <div id="reader-pos" class="w-full h-full"></div>
+            <button onclick="App.stopScanner()" class="absolute top-8 right-8 bg-white/20 backdrop-blur text-white p-2 rounded-full">
+                <i data-lucide="x" class="w-6 h-6"></i>
+            </button>
+            <div class="absolute bottom-20 w-full text-center text-white pointer-events-none">
+                <p class="bg-black/50 inline-block px-4 py-1 rounded-full text-sm">正在扫描商品条码...</p>
+            </div>
+        </div>
+
+        <div id="product-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] hidden flex items-end sm:items-center justify-center">
+            <div class="bg-white w-full sm:w-[400px] rounded-t-2xl sm:rounded-2xl p-6 shadow-2xl transform transition-transform duration-300">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-lg font-bold" id="modal-title">商品录入</h3>
+                    <button onclick="App.closeProductModal()" class="text-gray-400 hover:text-gray-600">
+                        <i data-lucide="x" class="w-6 h-6"></i>
+                    </button>
+                </div>
+                
+                <form id="product-form" onsubmit="event.preventDefault(); App.saveProduct();" class="space-y-4">
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">条形码</label>
+                        <input type="text" id="input-barcode" class="w-full bg-gray-100 p-3 rounded-xl font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none" readonly>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">商品名称</label>
+                        <input type="text" id="input-name" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="例如：可口可乐 330ml">
+                    </div>
+                    <div class="flex gap-4">
+                        <div class="flex-1">
+                            <label class="block text-xs text-gray-500 mb-1">进货价 (¥)</label>
+                            <input type="number" step="0.01" id="input-cost" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <div class="flex-1">
+                            <label class="block text-xs text-gray-500 mb-1">零售价 (¥)</label>
+                            <input type="number" step="0.01" id="input-price" class="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none font-bold text-gray-800">
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="w-full bg-blue-600 text-white py-4 rounded-xl font-bold shadow-lg shadow-blue-200 active:scale-[0.98] transition-transform mt-4">
+                        保存并继续 (Auto)
+                    </button>
+                </form>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const App = {
+            data: {
+                products: [],
+                cart: [],
+                isWholesale: false,
+                html5QrcodeScanner: null,
+                activeView: 'view-pos',
+                isScanning: false
+            },
+
+            // 初始化
+            init() {
+                // 加载数据
+                const stored = localStorage.getItem('products');
+                if (stored) this.data.products = JSON.parse(stored);
+                
+                // 绑定 Tab 切换
+                this.switchView('pos');
+                
+                // 绑定价格模式切换
+                document.getElementById('price-toggle').addEventListener('change', (e) => {
+                    this.data.isWholesale = e.target.checked;
+                    document.getElementById('price-mode-label').innerText = this.data.isWholesale ? '批发模式' : '零售模式';
+                    this.renderCart(); // 重新计算价格
+                });
+
+                // 绑定搜索
+                document.getElementById('search-input').addEventListener('input', (e) => {
+                    this.renderInventory(e.target.value);
+                });
+
+                // 首次渲染
+                this.renderInventory();
+                lucide.createIcons();
+            },
+
+            // --- 视图管理 ---
+            switchView(viewName) {
+                // 停止之前的扫描
+                this.stopScanner();
+                
+                // 切换 DOM 显示
+                document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+                document.getElementById(`view-${viewName}`).classList.remove('hidden');
+                
+                // 更新底部导航状态
+                document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('text-blue-600'));
+                document.querySelector(`button[data-target="view-${viewName}"]`).classList.add('text-blue-600');
+
+                this.data.activeView = viewName;
+
+                // 特殊逻辑：如果是 Add 页面，自动尝试开启扫码
+                if (viewName === 'add') {
+                    setTimeout(() => this.startScanner('add'), 300);
+                } else if (viewName === 'inventory') {
+                    this.renderInventory();
+                }
+            },
+
+            // --- 扫描逻辑 (核心) ---
+            async startScanner(mode) {
+                if (this.data.isScanning) return;
+                
+                const elemId = mode === 'add' ? 'reader-add' : 'reader-pos';
+                
+                // POS 模式显示全屏 Modal
+                if (mode === 'pos') {
+                    document.getElementById('scanner-modal').classList.remove('hidden');
+                }
+
+                try {
+                    this.data.html5QrcodeScanner = new Html5Qrcode(elemId);
+                    
+                    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+                    
+                    await this.data.html5QrcodeScanner.start(
+                        { facingMode: "environment" }, 
+                        config, 
+                        (decodedText) => this.handleScanSuccess(decodedText, mode)
+                    );
+                    
+                    this.data.isScanning = true;
+                    if(mode === 'add') document.getElementById('btn-start-add-scan').classList.add('hidden');
+
+                } catch (err) {
+                    console.error("Camera error", err);
+                    if(mode === 'add') document.getElementById('btn-start-add-scan').classList.remove('hidden');
+                    alert("无法启动摄像头，请检查权限。");
+                }
+            },
+
+            stopScanner() {
+                if (this.data.html5QrcodeScanner && this.data.isScanning) {
+                    this.data.html5QrcodeScanner.stop().then(() => {
+                        this.data.html5QrcodeScanner.clear();
+                        this.data.isScanning = false;
+                        document.getElementById('scanner-modal').classList.add('hidden');
+                    }).catch(err => console.error(err));
+                }
+            },
+
+            handleScanSuccess(barcode, mode) {
+                // 音效反馈 (可选)
+                // navigator.vibrate(200); 
+
+                if (mode === 'pos') {
+                    this.addToCart(barcode);
+                    // 保持扫描开启，方便连续收银
+                    // 可选：this.stopScanner(); 如果想扫一个就关掉
+                } else if (mode === 'add') {
+                    this.stopScanner(); // 必须暂停才能显示 Modal
+                    this.openProductModal(barcode);
+                }
+            },
+
+            // --- 商品录入逻辑 ---
+            openProductModal(barcode) {
+                const existing = this.data.products.find(p => p.barcode === barcode);
+                const modal = document.getElementById('product-modal');
+                
+                document.getElementById('input-barcode').value = barcode;
+                
+                if (existing) {
+                    document.getElementById('modal-title').innerText = "编辑商品";
+                    document.getElementById('input-name').value = existing.name;
+                    document.getElementById('input-cost').value = existing.cost;
+                    document.getElementById('input-price').value = existing.price;
+                } else {
+                    // 智能命名逻辑
+                    document.getElementById('modal-title').innerText = "新商品录入";
+                    const unnamedCount = this.data.products.filter(p => p.name.startsWith('未命名')).length;
+                    document.getElementById('input-name').value = unnamedCount === 0 ? "未命名" : `未命名${unnamedCount + 1}`;
+                    document.getElementById('input-cost').value = "";
+                    document.getElementById('input-price').value = "";
+                }
+
+                modal.classList.remove('hidden');
+                document.getElementById('input-name').focus();
+            },
+
+            closeProductModal() {
+                document.getElementById('product-modal').classList.add('hidden');
+                // 关键体验：如果是 Add 视图，关闭 Modal 后立即重启扫描
+                if (this.data.activeView === 'add') {
+                    this.startScanner('add');
+                }
+            },
+
+            saveProduct() {
+                const barcode = document.getElementById('input-barcode').value;
+                const name = document.getElementById('input-name').value || "未命名";
+                const cost = parseFloat(document.getElementById('input-cost').value) || 0;
+                const price = parseFloat(document.getElementById('input-price').value) || 0;
+
+                const newProduct = { barcode, name, cost, price };
+                
+                const index = this.data.products.findIndex(p => p.barcode === barcode);
+                if (index > -1) {
+                    this.data.products[index] = newProduct;
+                } else {
+                    this.data.products.push(newProduct);
+                }
+
+                this.saveToStorage();
+                
+                // Inventory 模式下的编辑
+                if (this.data.activeView === 'inventory') {
+                     this.renderInventory(document.getElementById('search-input').value);
+                     document.getElementById('product-modal').classList.add('hidden');
+                } else {
+                    // Add 模式下的连续录入
+                    this.closeProductModal(); 
+                }
+            },
+
+            saveToStorage() {
+                localStorage.setItem('products', JSON.stringify(this.data.products));
+            },
+
+            // --- 收银逻辑 (POS) ---
+            addToCart(barcode) {
+                const product = this.data.products.find(p => p.barcode === barcode);
+                if (!product) {
+                    alert(`未找到商品: ${barcode}，请先录入`);
+                    return;
+                }
+
+                const cartItem = this.data.cart.find(item => item.barcode === barcode);
+                if (cartItem) {
+                    cartItem.qty += 1;
+                } else {
+                    this.data.cart.unshift({ ...product, qty: 1 });
+                }
+                this.renderCart();
+            },
+
+            renderCart() {
+                const container = document.getElementById('cart-list');
+                const totalCountEl = document.getElementById('total-count');
+                const totalAmountEl = document.getElementById('total-amount');
+                
+                container.innerHTML = '';
+                let totalQty = 0;
+                let totalAmount = 0;
+
+                this.data.cart.forEach((item, index) => {
+                    // 根据模式选择价格
+                    const currentPrice = this.data.isWholesale ? item.cost : item.price;
+                    const rowTotal = currentPrice * item.qty;
+                    
+                    totalQty += item.qty;
+                    totalAmount += rowTotal;
+
+                    const div = document.createElement('div');
+                    div.className = "bg-white p-4 rounded-xl shadow-sm flex justify-between items-center border border-gray-100";
+                    div.innerHTML = `
+                        <div class="flex-1 overflow-hidden">
+                            <div class="font-bold text-gray-800 truncate">${item.name}</div>
+                            <div class="text-xs text-gray-400 font-mono mt-1">${item.barcode}</div>
+                            <div class="text-blue-600 font-bold mt-1">¥${currentPrice.toFixed(2)}</div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <button onclick="App.adjustQty(${index}, -1)" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 active:bg-gray-200">-</button>
+                            <span class="font-bold w-6 text-center">${item.qty}</span>
+                            <button onclick="App.adjustQty(${index}, 1)" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 active:bg-gray-200">+</button>
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+
+                if (this.data.cart.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center text-gray-400 mt-20">
+                            <i data-lucide="shopping-cart" class="w-12 h-12 mx-auto mb-2 opacity-50"></i>
+                            <p>请点击下方扫码开始收银</p>
+                        </div>
+                    `;
+                    lucide.createIcons();
+                }
+
+                totalCountEl.innerText = totalQty;
+                totalAmountEl.innerText = totalAmount.toFixed(2);
+            },
+
+            adjustQty(index, delta) {
+                const item = this.data.cart[index];
+                item.qty += delta;
+                if (item.qty <= 0) {
+                    this.data.cart.splice(index, 1);
+                }
+                this.renderCart();
+            },
+
+            clearCart() {
+                if(confirm('确定清空购物车吗？')) {
+                    this.data.cart = [];
+                    this.renderCart();
+                }
+            },
+
+            // --- 库存管理逻辑 ---
+            renderInventory(keyword = "") {
+                const container = document.getElementById('product-list');
+                container.innerHTML = '';
+                
+                const filtered = this.data.products.filter(p => 
+                    p.name.toLowerCase().includes(keyword.toLowerCase()) || 
+                    p.barcode.includes(keyword)
+                );
+
+                filtered.forEach(p => {
+                    const div = document.createElement('div');
+                    div.className = "bg-white p-4 rounded-xl shadow-sm flex justify-between items-center active:scale-[0.99] transition-transform cursor-pointer border border-gray-100";
+                    div.onclick = (e) => {
+                        // 防止点击按钮时触发编辑
+                        if(e.target.closest('button')) return;
+                        this.openProductModal(p.barcode);
+                    };
+                    
+                    div.innerHTML = `
+                        <div>
+                            <div class="font-bold text-gray-800">${p.name}</div>
+                            <div class="text-xs text-gray-400 font-mono mt-1">${p.barcode}</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="font-bold text-gray-800">¥${p.price.toFixed(2)}</div>
+                            <div class="text-xs text-gray-400">进: ¥${p.cost.toFixed(2)}</div>
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+
+                if (filtered.length === 0) {
+                    container.innerHTML = `<div class="text-center text-gray-400 py-10">暂无商品</div>`;
+                }
+            }
+        };
+
+        // 启动 App
+        window.addEventListener('DOMContentLoaded', () => {
+            App.init();
+        });
+    </script>
+</body>
+</html>
