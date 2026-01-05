@@ -3,19 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>云端收银系统 (已连接)</title>
+    <title>云收银 v2.2 (Brazil)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
     <style>
         body { -webkit-tap-highlight-color: transparent; }
         .hidden-page { display: none; }
         #interactive.viewport > video { width: 100%; height: auto; border-radius: 0.5rem; }
-        #interactive.viewport > canvas { display: none; }
-        /* 加载动画 */
         .spinner { border: 2px solid #f3f3f3; border-top: 2px solid #3b82f6; border-radius: 50%; width: 12px; height: 12px; animation: spin 1s linear infinite; display: inline-block; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
@@ -24,19 +23,20 @@
 
     <script>
         const CONFIG = {
-            // 您的项目 URL (来自截图)
+            // 您的 Project URL
             SUPABASE_URL: 'https://ovhjhqfjgwzvfpaiejb.supabase.co', 
             
-            // 您的 API Key (您刚才提供的)
+            // 您的 API Key (请确保没有空格)
             SUPABASE_KEY: 'sb_publishable_klFJUmGYIazBYL7XeIBogA_iN2Gnfwm'
         };
     </script>
 
     <header class="bg-white shadow-sm px-4 py-3 flex justify-between items-center z-20">
-        <h1 class="text-lg font-bold text-blue-600">云收银 <span class="text-xs text-gray-400 font-normal">v2.1</span></h1>
-        <div class="flex items-center space-x-2">
+        <h1 class="text-lg font-bold text-blue-600">云收银 <span class="text-xs text-gray-400 font-normal">v2.2</span></h1>
+        
+        <div class="flex items-center space-x-2" onclick="CloudManager.showDebugInfo()">
             <div id="sync-loading" class="hidden"><div class="spinner"></div></div>
-            <div class="text-xs text-green-600 font-medium" id="sync-status">初始化...</div>
+            <div class="text-xs text-green-600 font-medium underline decoration-dotted" id="sync-status">初始化...</div>
         </div>
     </header>
 
@@ -47,12 +47,10 @@
                 <button onclick="Cashier.setPriceMode('retail')" id="btn-retail" class="flex-1 py-2 text-sm rounded-md bg-blue-600 text-white transition">零售价</button>
                 <button onclick="Cashier.setPriceMode('wholesale')" id="btn-wholesale" class="flex-1 py-2 text-sm rounded-md text-gray-600 transition">批发价</button>
             </div>
-
             <div class="bg-white p-4 rounded-lg shadow-sm mb-4 text-center border-2 border-dashed border-gray-300 active:bg-gray-50" onclick="Scanner.startCamera('cashier')">
                 <i class="fas fa-barcode text-3xl text-gray-400 mb-2"></i>
                 <p class="text-sm text-gray-500">点击扫码 / 使用扫码枪</p>
             </div>
-
             <div id="cart-list" class="space-y-3"></div>
             <div class="h-20"></div>
         </section>
@@ -80,7 +78,6 @@
                 <div class="text-xs text-gray-500">今日云端销售额</div>
                 <div class="text-xl font-bold text-blue-600" id="stat-total">¥0.00</div>
             </div>
-            <h3 class="font-bold text-gray-700 mb-2">最近记录</h3>
             <div id="sales-log" class="space-y-2 text-sm"></div>
         </section>
     </main>
@@ -105,12 +102,10 @@
 
     <div id="modal-overlay" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden relative">
-            
             <div id="scan-modal-content" class="hidden relative h-64 bg-black">
                 <div id="interactive" class="viewport w-full h-full"></div>
                 <button onclick="Scanner.stopCamera()" class="absolute top-2 right-2 bg-white rounded-full p-2"><i class="fas fa-times"></i></button>
             </div>
-
             <div id="product-form-content" class="hidden p-6">
                 <h3 class="text-lg font-bold mb-4">编辑商品</h3>
                 <div class="space-y-4">
@@ -126,145 +121,108 @@
                     <button onclick="ProductManager.saveForm()" class="flex-1 py-2 bg-blue-600 text-white rounded">保存同步</button>
                 </div>
             </div>
-
         </div>
     </div>
     <div id="toast" class="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black bg-opacity-80 text-white px-4 py-2 rounded-lg text-sm hidden z-50"></div>
 
 <script>
-// --- 0. Supabase & 云端同步层 ---
 let supabase = null;
+let _lastError = '';
 
 const CloudManager = {
     init: () => {
-        try {
-            supabase = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
-            CloudManager.pullProducts();
-            CloudManager.pullSales(); // 新增：拉取销售记录
-        } catch (e) {
-            UI.updateStatus('连接配置错误', 'error');
-            console.error(e);
-        }
+        // 延迟执行，防止脚本未加载
+        setTimeout(() => {
+            try {
+                if(!window.supabase) {
+                    throw new Error("Supabase 脚本未加载");
+                }
+                supabase = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+                CloudManager.pullProducts();
+                CloudManager.pullSales();
+            } catch (e) {
+                console.error(e);
+                _lastError = e.message;
+                UI.updateStatus('连接错误(点我)', 'error');
+            }
+        }, 500);
+    },
+    
+    // 调试功能
+    showDebugInfo: () => {
+        alert("调试信息:\n" + (_lastError || "正在连接云端...\n如果长时间不消失，请检查 Key 是否正确"));
     },
 
-    // 拉取所有商品
     pullProducts: async () => {
         UI.setLoading(true);
         UI.updateStatus('同步商品...');
-        
-        const { data, error } = await supabase.from('products').select('*');
-        
-        if (error) {
-            console.error(error);
-            UI.updateStatus('同步商品失败', 'error');
-        } else {
+        try {
+            const { data, error } = await supabase.from('products').select('*');
+            if (error) throw error;
+            
             localStorage.setItem('products', JSON.stringify(data));
             if(Router.current === 'products') ProductManager.renderList();
             UI.updateStatus('云端已连接', 'success');
+            _lastError = ''; 
+        } catch(e) {
+            console.error(e);
+            _lastError = e.message || JSON.stringify(e);
+            UI.updateStatus('同步失败(点我)', 'error');
         }
         UI.setLoading(false);
     },
 
-    // 拉取今日销售
     pullSales: async () => {
-        const { data, error } = await supabase.from('sales').select('*').order('created_at', { ascending: false }).limit(20);
-        if(!error) {
-            localStorage.setItem('sales', JSON.stringify(data.map(d => d.data)));
-            if(Router.current === 'stats') StatsManager.render();
-        }
+        try {
+            const { data, error } = await supabase.from('sales').select('*').order('created_at', { ascending: false }).limit(20);
+            if(!error) {
+                localStorage.setItem('sales', JSON.stringify(data.map(d => d.data)));
+                if(Router.current === 'stats') StatsManager.render();
+            }
+        } catch(e){}
     },
 
-    // 上传单个商品 (新增或更新)
     upsertProduct: async (product) => {
         UI.updateStatus('正在上传...');
-        // 移除本地临时字段，只上传数据库需要的
-        const payload = {
-            barcode: product.barcode,
-            name: product.name,
-            cost: product.cost,
-            price: product.price,
-            updated_at: product.updated_at
-        };
-
+        const payload = { barcode: product.barcode, name: product.name, cost: product.cost, price: product.price, updated_at: product.updated_at };
         const { error } = await supabase.from('products').upsert(payload);
-        
-        if (error) {
-            UI.toast('上传失败: ' + error.message, 'error');
-            UI.updateStatus('上传失败', 'error');
-        } else {
-            UI.updateStatus('已保存至云端', 'success');
-        }
+        if (error) { UI.toast('上传失败', 'error'); UI.updateStatus('上传失败', 'error'); } 
+        else { UI.updateStatus('已保存至云端', 'success'); }
     },
 
-    // 上传销售记录
     pushSale: async (saleRecord) => {
         UI.updateStatus('正在结算...');
-        const { error } = await supabase.from('sales').insert({
-            id: saleRecord.id.toString(),
-            data: saleRecord
-        });
-        if(error) {
-            UI.toast('云端记录失败', 'error');
-        } else {
-            UI.updateStatus('销售已记录', 'success');
-            CloudManager.pullSales(); // 刷新统计
-        }
+        const { error } = await supabase.from('sales').insert({ id: saleRecord.id.toString(), data: saleRecord });
+        if(error) UI.toast('云端记录失败', 'error');
+        else { UI.updateStatus('销售已记录', 'success'); CloudManager.pullSales(); }
     },
     
-    forceSync: () => {
-        CloudManager.pullProducts();
-        CloudManager.pullSales();
-    }
+    forceSync: () => { CloudManager.pullProducts(); CloudManager.pullSales(); }
 };
 
-// --- 1. 数据层 (Local + Cloud) ---
 const DataStore = {
     getProducts: () => JSON.parse(localStorage.getItem('products') || '[]'),
     getSales: () => JSON.parse(localStorage.getItem('sales') || '[]'),
-    
-    // 保存逻辑：先存本地（为了快），再推云端
     saveProducts: (products, changedProduct = null) => {
         localStorage.setItem('products', JSON.stringify(products));
-        if (changedProduct) {
-            CloudManager.upsertProduct(changedProduct);
-        }
+        if (changedProduct) CloudManager.upsertProduct(changedProduct);
     },
-
     findProduct: (barcode) => DataStore.getProducts().find(p => p.barcode === barcode)
 };
 
-// --- 2. 业务逻辑 (商品管理) ---
 const ProductManager = {
     renderList: () => {
         const list = DataStore.getProducts();
         const container = document.getElementById('product-list');
         container.innerHTML = list.length === 0 ? '<div class="text-center text-gray-400 mt-10">暂无数据，请在“录入”页添加</div>' : '';
-
-        // 按更新时间降序
         list.sort((a,b) => (b.updated_at || 0) - (a.updated_at || 0)).forEach(p => {
             const el = document.createElement('div');
             el.className = 'bg-white p-3 rounded-lg shadow-sm flex justify-between items-center';
-            el.innerHTML = `
-                <div>
-                    <div class="font-bold">${p.name}</div>
-                    <div class="text-xs text-gray-400">${p.barcode}</div>
-                    <div class="text-xs mt-1">
-                        <span class="text-green-600 mr-2 font-bold">¥${p.price}</span>
-                        <span class="text-gray-400">进:¥${p.cost}</span>
-                    </div>
-                </div>
-                <button onclick="ProductManager.edit('${p.barcode}')" class="text-blue-500 px-3 py-2"><i class="fas fa-edit"></i></button>
-            `;
+            el.innerHTML = `<div><div class="font-bold">${p.name}</div><div class="text-xs text-gray-400">${p.barcode}</div><div class="text-xs mt-1"><span class="text-green-600 mr-2 font-bold">¥${p.price}</span><span class="text-gray-400">进:¥${p.cost}</span></div></div><button onclick="ProductManager.edit('${p.barcode}')" class="text-blue-500 px-3 py-2"><i class="fas fa-edit"></i></button>`;
             container.appendChild(el);
         });
     },
-    
-    generateName: () => {
-        const products = DataStore.getProducts();
-        const count = products.filter(p => p.name && p.name.startsWith('未命名')).length;
-        return `未命名${count + 1}`;
-    },
-
+    generateName: () => `未命名${DataStore.getProducts().filter(p => p.name && p.name.startsWith('未命名')).length + 1}`,
     openForm: (barcode) => {
         const product = DataStore.findProduct(barcode);
         document.getElementById('input-barcode').value = barcode;
@@ -273,191 +231,97 @@ const ProductManager = {
         document.getElementById('input-price').value = product ? product.price : '';
         UI.showModal('product-form');
     },
-
     saveForm: () => {
         const barcode = document.getElementById('input-barcode').value;
-        const nameInput = document.getElementById('input-name').value.trim();
+        const name = document.getElementById('input-name').value.trim() || ProductManager.generateName();
         const cost = parseFloat(document.getElementById('input-cost').value) || 0;
         const price = parseFloat(document.getElementById('input-price').value) || 0;
-
         const products = DataStore.getProducts();
         const idx = products.findIndex(p => p.barcode === barcode);
-        
-        // 如果是新商品且没填名字，自动生成
-        const name = nameInput || (idx >= 0 ? products[idx].name : ProductManager.generateName());
-
         const newProduct = { barcode, name, cost, price, updated_at: Date.now() };
-
-        if (idx >= 0) products[idx] = newProduct;
-        else products.push(newProduct);
-
-        DataStore.saveProducts(products, newProduct); // 触发云端上传
-        
-        UI.closeModal();
-        UI.toast('已保存');
-        if (Router.current === 'add') setTimeout(() => Scanner.startCamera('entry'), 500);
-        else ProductManager.renderList();
+        if (idx >= 0) products[idx] = newProduct; else products.push(newProduct);
+        DataStore.saveProducts(products, newProduct);
+        UI.closeModal(); UI.toast('已保存');
+        if (Router.current === 'add') setTimeout(() => Scanner.startCamera('entry'), 500); else ProductManager.renderList();
     },
-
     edit: (code) => ProductManager.openForm(code)
 };
 
-// --- 3. 收银逻辑 ---
 const Cashier = {
     cart: [],
     priceMode: 'retail',
-    
     setPriceMode: (mode) => {
         Cashier.priceMode = mode;
         document.getElementById('btn-retail').className = mode === 'retail' ? 'flex-1 py-2 text-sm rounded-md bg-blue-600 text-white transition' : 'flex-1 py-2 text-sm rounded-md text-gray-600 transition';
         document.getElementById('btn-wholesale').className = mode === 'wholesale' ? 'flex-1 py-2 text-sm rounded-md bg-purple-600 text-white transition' : 'flex-1 py-2 text-sm rounded-md text-gray-600 transition';
         Cashier.renderCart();
     },
-
     addToCart: (barcode) => {
         const product = DataStore.findProduct(barcode);
-        if (!product) return UI.toast('未找到商品，请先录入', 'error');
-        
+        if (!product) return UI.toast('未找到商品', 'error');
         const existing = Cashier.cart.find(i => i.barcode === barcode);
-        if (existing) existing.qty++;
-        else Cashier.cart.push({ ...product, qty: 1 });
-        
-        UI.toast(`已添加: ${product.name}`);
-        Cashier.renderCart();
+        if (existing) existing.qty++; else Cashier.cart.push({ ...product, qty: 1 });
+        UI.toast(`已添加: ${product.name}`); Cashier.renderCart();
     },
-
     adjustQty: (barcode, d) => {
         const item = Cashier.cart.find(i => i.barcode === barcode);
-        if (item) {
-            item.qty += d;
-            if (item.qty <= 0) Cashier.cart = Cashier.cart.filter(i => i.barcode !== barcode);
-            Cashier.renderCart();
-        }
+        if (item) { item.qty += d; if (item.qty <= 0) Cashier.cart = Cashier.cart.filter(i => i.barcode !== barcode); Cashier.renderCart(); }
     },
-
-    clearCart: () => { 
-        if(confirm('确定清空购物车?')) {
-            Cashier.cart = []; 
-            Cashier.renderCart(); 
-        }
-    },
-
+    clearCart: () => { if(confirm('清空?')) { Cashier.cart = []; Cashier.renderCart(); } },
     renderCart: () => {
-        const div = document.getElementById('cart-list');
-        div.innerHTML = '';
+        const div = document.getElementById('cart-list'); div.innerHTML = '';
         let total = 0, count = 0;
-        
         Cashier.cart.forEach(item => {
             const price = Cashier.priceMode === 'retail' ? item.price : item.cost;
-            const subtotal = price * item.qty;
-            total += subtotal;
-            count += item.qty;
-            
+            total += price * item.qty; count += item.qty;
             const el = document.createElement('div');
             el.className = 'bg-white p-3 rounded-lg shadow-sm flex justify-between items-center';
-            el.innerHTML = `
-                <div class="flex-1">
-                    <div class="font-bold">${item.name}</div>
-                    <div class="text-blue-600 text-xs">单价: ¥${price}</div>
-                </div>
-                <div class="flex items-center space-x-2">
-                    <button onclick="Cashier.adjustQty('${item.barcode}', -1)" class="w-8 h-8 bg-gray-100 rounded-full font-bold text-gray-600">-</button>
-                    <span class="w-6 text-center font-bold">${item.qty}</span>
-                    <button onclick="Cashier.adjustQty('${item.barcode}', 1)" class="w-8 h-8 bg-blue-100 rounded-full text-blue-600 font-bold">+</button>
-                </div>
-            `;
+            el.innerHTML = `<div class="flex-1"><div class="font-bold">${item.name}</div><div class="text-blue-600 text-xs">单价: ¥${price}</div></div><div class="flex items-center space-x-2"><button onclick="Cashier.adjustQty('${item.barcode}', -1)" class="w-8 h-8 bg-gray-100 rounded-full font-bold text-gray-600">-</button><span class="w-6 text-center font-bold">${item.qty}</span><button onclick="Cashier.adjustQty('${item.barcode}', 1)" class="w-8 h-8 bg-blue-100 rounded-full text-blue-600 font-bold">+</button></div>`;
             div.appendChild(el);
         });
-        document.getElementById('cart-count').innerText = count;
-        document.getElementById('cart-total').innerText = total.toFixed(2);
+        document.getElementById('cart-count').innerText = count; document.getElementById('cart-total').innerText = total.toFixed(2);
     },
-
     checkout: () => {
-        if (Cashier.cart.length === 0) return UI.toast('购物车为空');
+        if (Cashier.cart.length === 0) return UI.toast('空车');
         const total = parseFloat(document.getElementById('cart-total').innerText);
-        const record = { 
-            id: Date.now(), 
-            items: Cashier.cart.map(i => ({n: i.name, b: i.barcode, q: i.qty, p: (Cashier.priceMode === 'retail' ? i.price : i.cost)})), 
-            total, 
-            mode: Cashier.priceMode, 
-            date: new Date().toISOString() 
-        };
-        
-        CloudManager.pushSale(record);
-        
-        Cashier.cart = [];
-        Cashier.renderCart();
-        UI.toast(`结算成功 ¥${total}`);
+        const record = { id: Date.now(), items: Cashier.cart.map(i => ({n: i.name, b: i.barcode, q: i.qty, p: (Cashier.priceMode === 'retail' ? i.price : i.cost)})), total, mode: Cashier.priceMode, date: new Date().toISOString() };
+        CloudManager.pushSale(record); Cashier.cart = []; Cashier.renderCart(); UI.toast(`结算 ¥${total}`);
     }
 };
 
 const StatsManager = {
     render: () => {
         const sales = DataStore.getSales();
-        // 计算今日总额
-        const todayStr = new Date().toDateString();
-        const todaySales = sales.filter(s => new Date(s.date).toDateString() === todayStr);
-        const total = todaySales.reduce((acc, cur) => acc + cur.total, 0);
-
+        const total = sales.filter(s => new Date(s.date).toDateString() === new Date().toDateString()).reduce((acc, cur) => acc + cur.total, 0);
         document.getElementById('stat-total').innerText = `¥${total.toFixed(2)}`;
-
-        const logContainer = document.getElementById('sales-log');
-        logContainer.innerHTML = '';
+        const log = document.getElementById('sales-log'); log.innerHTML = '';
         sales.forEach(s => {
-            const el = document.createElement('div');
-            el.className = 'flex justify-between border-b pb-2 mb-2';
-            el.innerHTML = `
-                <span class="text-gray-500 text-xs">${new Date(s.date).toLocaleTimeString()}</span>
-                <span class="font-bold text-sm">¥${s.total.toFixed(2)}</span>
-            `;
-            logContainer.appendChild(el);
+            const el = document.createElement('div'); el.className = 'flex justify-between border-b pb-2 mb-2';
+            el.innerHTML = `<span class="text-gray-500 text-xs">${new Date(s.date).toLocaleTimeString()}</span><span class="font-bold text-sm">¥${s.total.toFixed(2)}</span>`;
+            log.appendChild(el);
         });
     }
 };
 
-// --- 4. 扫码与路由 ---
 const Scanner = {
     buffer: '', lastKeyTime: 0, _scanning: false,
     handleScan: (code) => {
         Scanner.stopCamera();
-        if (Router.current === 'add') {
-            const p = DataStore.findProduct(code);
-            p ? ProductManager.edit(code) : ProductManager.openForm(code);
-        } else {
-            Cashier.addToCart(code);
-        }
+        if (Router.current === 'add') { const p = DataStore.findProduct(code); p ? ProductManager.edit(code) : ProductManager.openForm(code); } else { Cashier.addToCart(code); }
     },
     startCamera: (page) => {
         UI.showModal('scan');
-        Quagga.init({
-            inputStream: { name: "Live", type: "LiveStream", target: document.querySelector('#interactive') },
-            decoder: { readers: ["ean_reader", "code_128_reader", "upc_reader"] }
-        }, (err) => {
-            if (err) {
-                UI.toast("相机失败: 请确保使用HTTPS", "error");
-                UI.closeModal();
-                return;
-            }
-            Quagga.start();
-        });
-        Quagga.onDetected((d) => {
-            if (Scanner._scanning) return;
-            Scanner._scanning = true;
-            Scanner.handleScan(d.codeResult.code);
-            setTimeout(() => Scanner._scanning = false, 1000);
-        });
+        try {
+            Quagga.init({ inputStream: { name: "Live", type: "LiveStream", target: document.querySelector('#interactive') }, decoder: { readers: ["ean_reader", "code_128_reader"] } }, (err) => { if (err) { UI.toast("相机失败", "error"); return; } Quagga.start(); });
+            Quagga.onDetected((d) => { if (Scanner._scanning) return; Scanner._scanning = true; Scanner.handleScan(d.codeResult.code); setTimeout(() => Scanner._scanning = false, 1000); });
+        } catch(e) { UI.toast("相机组件未加载", "error"); }
     },
-    stopCamera: () => { if(Quagga){try{Quagga.stop()}catch(e){}} UI.closeModal(); },
+    stopCamera: () => { try{ Quagga.stop() }catch(e){} UI.closeModal(); },
     initGunListener: () => {
         document.addEventListener('keydown', (e) => {
             if (e.target.tagName === 'INPUT') return;
-            const now = Date.now();
-            if (now - Scanner.lastKeyTime > 100) Scanner.buffer = '';
-            Scanner.lastKeyTime = now;
-            if (e.key === 'Enter') {
-                if (Scanner.buffer.length > 2) Scanner.handleScan(Scanner.buffer);
-                Scanner.buffer = '';
-            } else if (e.key.length === 1) Scanner.buffer += e.key;
+            const now = Date.now(); if (now - Scanner.lastKeyTime > 100) Scanner.buffer = ''; Scanner.lastKeyTime = now;
+            if (e.key === 'Enter') { if (Scanner.buffer.length > 2) Scanner.handleScan(Scanner.buffer); Scanner.buffer = ''; } else if (e.key.length === 1) Scanner.buffer += e.key;
         });
     }
 };
@@ -465,63 +329,24 @@ const Scanner = {
 const Router = {
     current: 'cashier',
     go: (id) => {
-        document.querySelectorAll('.page-view').forEach(e => e.classList.add('hidden-page'));
-        document.getElementById(`view-${id}`).classList.remove('hidden-page');
-        document.querySelectorAll('.nav-btn').forEach(b => {
-            b.classList.remove('text-blue-600');
-            if(b.dataset.target === id) b.classList.add('text-blue-600');
-        });
-        if (id === 'cashier') {
-            document.getElementById('cashier-bar').classList.remove('hidden');
-            Cashier.renderCart();
-        } else {
-            document.getElementById('cashier-bar').classList.add('hidden');
-        }
-        if (id === 'products') {
-            ProductManager.renderList();
-            CloudManager.pullProducts(); // 进页面自动刷新
-        }
-        if (id === 'stats') {
-            CloudManager.pullSales();
-            StatsManager.render();
-        }
+        document.querySelectorAll('.page-view').forEach(e => e.classList.add('hidden-page')); document.getElementById(`view-${id}`).classList.remove('hidden-page');
+        document.querySelectorAll('.nav-btn').forEach(b => { b.classList.remove('text-blue-600'); if(b.dataset.target === id) b.classList.add('text-blue-600'); });
+        if (id === 'cashier') { document.getElementById('cashier-bar').classList.remove('hidden'); Cashier.renderCart(); } else { document.getElementById('cashier-bar').classList.add('hidden'); }
+        if (id === 'products') { ProductManager.renderList(); CloudManager.pullProducts(); }
+        if (id === 'stats') { CloudManager.pullSales(); StatsManager.render(); }
         Router.current = id;
     }
 };
 
 const UI = {
-    showModal: (t) => {
-        document.getElementById('modal-overlay').classList.remove('hidden');
-        document.getElementById('scan-modal-content').classList.add('hidden');
-        document.getElementById('product-form-content').classList.add('hidden');
-        if(t === 'scan') document.getElementById('scan-modal-content').classList.remove('hidden');
-        if(t === 'product-form') document.getElementById('product-form-content').classList.remove('hidden');
-    },
-    closeModal: () => {
-        document.getElementById('modal-overlay').classList.add('hidden');
-        try{ Quagga.stop() }catch(e){}
-    },
-    toast: (m, t='info') => {
-        const el = document.getElementById('toast');
-        el.innerText = m;
-        el.className = `fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 px-4 py-2 rounded-lg text-sm z-50 transition-opacity ${t==='error'?'bg-red-600 text-white':'bg-black bg-opacity-80 text-white'}`;
-        el.classList.remove('hidden');
-        setTimeout(() => el.classList.add('hidden'), 2000);
-    },
-    setLoading: (show) => {
-        document.getElementById('sync-loading').className = show ? 'block' : 'hidden';
-    },
-    updateStatus: (text, type='normal') => {
-        const el = document.getElementById('sync-status');
-        el.innerText = text;
-        el.className = `text-xs font-medium ${type === 'error' ? 'text-red-500' : 'text-green-600'}`;
-    }
+    showModal: (t) => { document.getElementById('modal-overlay').classList.remove('hidden'); document.getElementById('scan-modal-content').classList.add('hidden'); document.getElementById('product-form-content').classList.add('hidden'); if(t === 'scan') document.getElementById('scan-modal-content').classList.remove('hidden'); if(t === 'product-form') document.getElementById('product-form-content').classList.remove('hidden'); },
+    closeModal: () => { document.getElementById('modal-overlay').classList.add('hidden'); try{ Quagga.stop() }catch(e){} },
+    toast: (m, t='info') => { const el = document.getElementById('toast'); el.innerText = m; el.className = `fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 px-4 py-2 rounded-lg text-sm z-50 transition-opacity ${t==='error'?'bg-red-600 text-white':'bg-black bg-opacity-80 text-white'}`; el.classList.remove('hidden'); setTimeout(() => el.classList.add('hidden'), 2000); },
+    setLoading: (show) => { document.getElementById('sync-loading').className = show ? 'block' : 'hidden'; },
+    updateStatus: (text, type='normal') => { const el = document.getElementById('sync-status'); el.innerText = text; el.className = `text-xs font-medium underline decoration-dotted ${type === 'error' ? 'text-red-500' : 'text-green-600'}`; }
 };
 
-// 初始化
-Scanner.initGunListener();
-Router.go('cashier');
-CloudManager.init();
+Scanner.initGunListener(); Router.go('cashier'); CloudManager.init();
 </script>
 </body>
 </html>
