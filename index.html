@@ -393,7 +393,7 @@
             </div>
             <div class="grid grid-cols-2 gap-3 mt-6">
                  <button @click="showEntryModal = false; scanning = true; startScanner('entry')" class="py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm">放弃/重扫</button>
-                 <button @click="saveProduct(); showEntryModal = false; scanning = true; startScanner('entry')" class="py-3 bg-slate-900 text-white rounded-xl font-bold text-sm shadow-lg">确认并继续</button>
+                 <button @click="confirmAndContinueScan" class="py-3 bg-slate-900 text-white rounded-xl font-bold text-sm shadow-lg">确认并继续</button>
             </div>
         </div>
     </div>
@@ -649,15 +649,13 @@ async mounted() {
             // -----------------------------------------------------------
             // 🔔 核心交互：扫码音效
             // -----------------------------------------------------------
-            playBeep() { 
-                // 使用更清晰响亮的“滴”声 Base64
-                const a = new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAAB3d3d3d3d3d4eHh4eHh4eHl5eXl5eXl5eYmJiYmJiYmJiXl5eXl5eXl5eHh4eHh4eHh4d3d3d3d3d3d3d3d3d3d3d3d4eHh4eHh4eHl5eXl5eXl5eYmJiYmJiYmJiXl5eXl5eXl5eHh4eHh4eHh4d3d3d3d3d3dw=="); 
-                a.volume = 1.0;
-                a.currentTime = 0; // 关键：每次播放前重置进度，防止连续扫描时没声音
-                a.play().catch(e => console.log("声音播放被拦截:", e)); 
-                
-                // 兼容性震动 (仅安卓生效)
-                if (navigator.vibrate) navigator.vibrate(200);
+                        playBeep() { 
+                try {
+                    const a = new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAAB3d3d3d3d3d4eHh4eHh4eHl5eXl5eXl5eYmJiYmJiYmJiXl5eXl5eXl5eHh4eHh4eHh4d3d3d3d3d3d3d3d3d3d3d3d4eHh4eHh4eHl5eXl5eXl5eYmJiYmJiYmJiXl5eXl5eXl5eHh4eHh4eHh4d3d3d3d3d3dw=="); 
+                    a.volume = 1.0;
+                    a.play().catch(() => {}); // 忽略自动播放限制错误
+                    if (navigator.vibrate) navigator.vibrate(200);
+                } catch (e) {}
             },
             
             onScanSuccess(decodedText, tab) {
@@ -1190,5 +1188,6 @@ async mounted() {
 </script>
 </body>
 </html>
+
 
 
