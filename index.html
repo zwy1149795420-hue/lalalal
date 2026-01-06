@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>极简收银 Pro (扫码枪适配版)</title>
+    <title>极简收银 Pro (UI优化版)</title>
     
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -17,11 +17,8 @@
         body { margin: 0; background-color: #f8fafc; -webkit-tap-highlight-color: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
         
         /* 摄像头基础样式 */
-        .scan-base { width: 100%; background-color: #000; border-radius: 12px; overflow: hidden; position: relative; }
-        #reader video, #manage-reader video, #cashier-reader video { width: 100% !important; height: 100% !important; object-fit: cover !important; border-radius: 12px; }
-        
-        /* 静止扫描线 */
-        .scan-laser-static { position: absolute; top: 50%; left: 10%; right: 10%; height: 2px; background: rgba(59, 130, 246, 0.6); box-shadow: 0 0 4px rgba(59,130,246,0.6); z-index: 10; }
+        .scan-base { width: 100%; background-color: #000; border-radius: 16px; overflow: hidden; position: relative; }
+        #reader video, #manage-reader video, #cashier-reader video { width: 100% !important; height: 100% !important; object-fit: cover !important; border-radius: 16px; }
         
         /* 隐藏滚动条 */
         .hide-scrollbar::-webkit-scrollbar { display: none; }
@@ -29,8 +26,6 @@
         
         /* 交互反馈 */
         .btn-press:active { transform: scale(0.96); opacity: 0.8; transition: transform 0.1s; }
-        
-        /* 输入框样式 & 防键盘遮挡 */
         input:focus, select:focus { outline: none; border-color: #3b82f6; ring: 2px; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); scroll-margin-top: 100px; }
         
         [v-cloak] { display: none; }
@@ -77,72 +72,80 @@
         <div ref="mainContent" class="flex-1 overflow-y-auto hide-scrollbar p-3 md:p-8 bg-slate-50/50 pb-[300px] md:pb-8">
             
             <div v-if="currentTab === 'cashier'" class="h-full flex flex-col md:flex-row gap-4">
-                <div class="w-full md:w-[380px] flex flex-col gap-3 shrink-0">
-                    <div class="grid grid-cols-2 gap-2 bg-white p-1 rounded-xl shadow-sm border border-slate-100">
-                        <button @click="switchPriceMode('retail')" :class="priceMode === 'retail' ? 'bg-blue-600 text-white shadow' : 'text-slate-500'" class="py-2.5 rounded-lg font-bold text-sm transition-all">零售模式</button>
-                        <button @click="switchPriceMode('wholesale')" :class="priceMode === 'wholesale' ? 'bg-orange-500 text-white shadow' : 'text-slate-500'" class="py-2.5 rounded-lg font-bold text-sm transition-all">批发模式</button>
+                
+                <div v-if="scanning" class="w-full md:w-[350px] shrink-0 flex flex-col gap-3 transition-all">
+                    <div class="scan-base h-[250px] md:h-full shadow-inner border border-slate-200 relative bg-black rounded-2xl overflow-hidden">
+                        <div id="cashier-reader" class="w-full h-full"></div>
+                        <button @click="stopScanner" class="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white/20 backdrop-blur text-white px-4 py-2 rounded-full text-sm font-bold border border-white/30">关闭摄像头</button>
+                    </div>
+                </div>
+
+                <div class="flex-1 flex flex-col h-full overflow-hidden gap-3">
+                    
+                    <div class="grid grid-cols-2 gap-2 bg-white p-1.5 rounded-2xl shadow-sm border border-slate-100 shrink-0">
+                        <button @click="switchPriceMode('retail')" :class="priceMode === 'retail' ? 'bg-blue-600 text-white shadow' : 'text-slate-500 hover:bg-slate-50'" class="py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2">
+                            <i class="ph-tag"></i> 零售模式
+                        </button>
+                        <button @click="switchPriceMode('wholesale')" :class="priceMode === 'wholesale' ? 'bg-orange-500 text-white shadow' : 'text-slate-500 hover:bg-slate-50'" class="py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2">
+                            <i class="ph-package"></i> 批发模式
+                        </button>
                     </div>
 
-                    <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-100 space-y-3">
+                    <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 shrink-0">
                         <div class="relative">
-                            <input ref="cashierInput" v-model="cashierSearch" @keyup.enter="addToCartByInput" @focus="scrollToInput($event)" type="text" placeholder="扫码枪直接扫 / 手动输入" class="w-full p-4 pl-12 bg-slate-50 rounded-xl font-bold text-lg border border-transparent focus:bg-white focus:border-blue-200 transition-all">
+                            <input ref="cashierInput" v-model="cashierSearch" @keyup.enter="addToCartByInput" @focus="scrollToInput($event)" type="text" placeholder="扫码枪直接扫 / 输入名称" class="w-full p-4 pl-12 bg-slate-50 rounded-xl font-bold text-lg border border-transparent focus:bg-white focus:border-blue-200 transition-all">
                             <i class="ph-barcode absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl"></i>
-                            
                             <button v-if="isMobile" @click="toggleScanner('cashier')" :class="scanning ? 'text-blue-600 bg-blue-50' : 'text-slate-500 bg-slate-100'" class="absolute right-2 top-2 p-2 rounded-lg transition-colors">
                                 <i class="ph-qr-code text-xl"></i>
                             </button>
                         </div>
-                        
-                        <div v-if="isMobile && scanning" class="scan-base h-[180px] shadow-inner border border-slate-200">
-                            <div id="cashier-reader" class="w-full h-full"></div>
-                        </div>
                     </div>
-                </div>
 
-                <div class="flex-1 flex flex-col bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden relative min-h-[400px]">
-                    <div class="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                        <div class="flex items-center gap-2">
-                            <div class="w-2 h-4 rounded-full" :class="priceMode==='retail'?'bg-blue-500':'bg-orange-500'"></div>
-                            <h3 class="font-bold text-slate-700">当前清单 ({{ cartTotalQty }})</h3>
-                        </div>
-                        <button @click="clearCart" class="text-red-500 text-sm font-bold" v-if="cart.length > 0">清空</button>
-                    </div>
-                    
-                    <div class="flex-1 overflow-y-auto p-3 space-y-2">
-                        <div v-if="cart.length === 0" class="h-full flex flex-col items-center justify-center text-slate-300">
-                            <i class="ph-shopping-cart text-5xl mb-2"></i>
-                            <p>等待扫码...</p>
-                        </div>
-                        <div v-for="(item, index) in cart" :key="index" class="flex flex-col p-3 bg-white border border-slate-100 rounded-lg shadow-sm">
-                            <div class="flex justify-between items-start mb-2">
-                                <div>
-                                    <div class="font-bold text-slate-800 text-lg">{{ item.name }}</div>
-                                    <div class="text-xs text-slate-400 font-mono">{{ item.barcode }}</div>
-                                </div>
-                                <button @click="removeFromCart(index)" class="text-slate-300 hover:text-red-500"><i class="ph-trash text-xl"></i></button>
+                    <div class="flex-1 flex flex-col bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden min-h-0">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
+                            <div class="flex items-center gap-2">
+                                <div class="w-2 h-4 rounded-full" :class="priceMode==='retail'?'bg-blue-500':'bg-orange-500'"></div>
+                                <h3 class="font-bold text-slate-700">当前清单 ({{ cartTotalQty }})</h3>
                             </div>
-                            <div class="flex justify-between items-center bg-slate-50 p-2 rounded-lg">
-                                <div class="flex items-center gap-2">
-                                    <button @click="item.quantity > 1 ? item.quantity-- : removeFromCart(index)" class="w-8 h-8 bg-white rounded border border-slate-200 text-slate-700 font-bold">-</button>
-                                    <span class="w-8 text-center font-bold text-lg">{{ item.quantity }}</span>
-                                    <button @click="item.quantity++" class="w-8 h-8 bg-blue-600 rounded text-white font-bold shadow-sm">+</button>
+                            <button @click="clearCart" class="text-red-500 text-sm font-bold hover:bg-red-50 px-2 py-1 rounded" v-if="cart.length > 0">清空</button>
+                        </div>
+                        
+                        <div class="flex-1 overflow-y-auto p-3 space-y-2">
+                            <div v-if="cart.length === 0" class="h-full flex flex-col items-center justify-center text-slate-300">
+                                <i class="ph-shopping-cart text-6xl mb-4 text-slate-200"></i>
+                                <p>当前按 {{ priceMode==='retail'?'零售价':'批发价' }} 结算</p>
+                            </div>
+                            <div v-for="(item, index) in cart" :key="index" class="flex flex-col p-3 bg-white border border-slate-100 rounded-xl shadow-sm hover:border-blue-200 transition-colors">
+                                <div class="flex justify-between items-start mb-2">
+                                    <div>
+                                        <div class="font-bold text-slate-800 text-lg">{{ item.name }}</div>
+                                        <div class="text-xs text-slate-400 font-mono">{{ item.barcode }}</div>
+                                    </div>
+                                    <button @click="removeFromCart(index)" class="text-slate-300 hover:text-red-500 p-1"><i class="ph-trash text-xl"></i></button>
                                 </div>
-                                <div class="text-right">
-                                    <div class="text-xs text-slate-400 mb-1">单价 ({{ priceMode==='retail'?'零':'批' }})</div>
-                                    <input v-model="item.unit_price" @focus="scrollToInput($event)" type="number" class="w-24 text-right font-bold text-xl bg-transparent border-b border-transparent focus:border-blue-500 focus:bg-white rounded px-1 transition-all">
+                                <div class="flex justify-between items-center bg-slate-50 p-2 rounded-lg">
+                                    <div class="flex items-center gap-2">
+                                        <button @click="item.quantity > 1 ? item.quantity-- : removeFromCart(index)" class="w-8 h-8 bg-white rounded border border-slate-200 text-slate-700 font-bold hover:bg-slate-100">-</button>
+                                        <span class="w-8 text-center font-bold text-lg">{{ item.quantity }}</span>
+                                        <button @click="item.quantity++" class="w-8 h-8 bg-blue-600 rounded text-white font-bold shadow-sm hover:bg-blue-700">+</button>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="text-[10px] text-slate-400 mb-0.5">单价 ({{ priceMode==='retail'?'零':'批' }})</div>
+                                        <input v-model="item.unit_price" @focus="scrollToInput($event)" type="number" class="w-20 text-right font-bold text-lg bg-transparent border-b border-transparent focus:border-blue-500 focus:bg-white rounded px-1 transition-all">
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                    
-                    <div class="p-4 border-t border-slate-100 bg-slate-50 flex flex-col gap-3">
-                        <div class="flex justify-between items-end">
-                            <span class="text-slate-500 text-sm">合计金额</span>
-                            <div class="text-3xl font-black text-slate-900">R$ {{ cartTotalPrice }}</div>
+                        
+                        <div class="p-4 border-t border-slate-100 bg-slate-50 flex flex-col gap-3 shrink-0">
+                            <div class="flex justify-between items-end">
+                                <span class="text-slate-500 text-sm">合计金额</span>
+                                <div class="text-3xl font-black text-slate-900">R$ {{ cartTotalPrice }}</div>
+                            </div>
+                            <button @click="checkoutDirectly" :disabled="cart.length===0" class="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-lg shadow-lg disabled:opacity-50 btn-press transition-colors">
+                                确认收款
+                            </button>
                         </div>
-                        <button @click="checkoutDirectly" :disabled="cart.length===0" class="w-full py-3.5 bg-slate-900 text-white rounded-xl font-bold text-lg shadow-lg disabled:opacity-50 btn-press">
-                            确认收款
-                        </button>
                     </div>
                 </div>
             </div>
@@ -191,24 +194,30 @@
                 </div>
             </div>
 
-            <div v-if="currentTab === 'entry'" class="flex flex-col lg:flex-row gap-4 max-w-5xl mx-auto">
-                <div v-if="isMobile" class="w-full lg:w-1/2 relative">
-                    <div class="scan-base shadow-lg h-[160px] mb-4">
-                        <div v-show="scanning" class="w-full h-full">
-                             <div id="reader" class="w-full h-full"></div>
-                             <div class="scan-laser-static"></div>
+            <div v-if="currentTab === 'entry'" class="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-7xl mx-auto h-full">
+                
+                <div class="flex flex-col gap-4">
+                    <div v-if="isMobile" class="w-full relative">
+                        <div class="scan-base shadow-lg h-[200px]">
+                            <div v-show="scanning" class="w-full h-full">
+                                 <div id="reader" class="w-full h-full"></div>
+                                 </div>
+                            <div v-if="!scanning" class="absolute inset-0 flex flex-col items-center justify-center text-slate-500 bg-black">
+                                <i class="ph-camera-slash text-5xl mb-2"></i><p>摄像头已关闭</p>
+                            </div>
                         </div>
-                        <div v-if="!scanning" class="absolute inset-0 flex flex-col items-center justify-center text-slate-500 bg-black">
-                            <i class="ph-camera-slash text-5xl mb-2"></i><p>摄像头已关闭</p>
-                        </div>
+                        <button @click="toggleScanner('entry')" class="w-full mt-3 py-3 bg-slate-900 text-white rounded-xl font-bold shadow-xl flex items-center justify-center gap-2 btn-press">
+                            <i :class="scanning ? 'ph-x' : 'ph-camera'" class="text-xl"></i> {{ scanning ? '停止' : '扫描' }}
+                        </button>
                     </div>
-                    <button @click="toggleScanner('entry')" class="w-full py-4 bg-slate-900 text-white rounded-xl font-bold shadow-xl flex items-center justify-center gap-2 btn-press">
-                        <i :class="scanning ? 'ph-x' : 'ph-camera'" class="text-xl"></i> {{ scanning ? '停止扫描' : '开启摄像头' }}
-                    </button>
-                    <p v-if="scanError" class="text-center text-red-500 text-xs mt-2">{{ scanError }}</p>
+                    <div v-else class="bg-blue-50 p-6 rounded-2xl border border-blue-100 text-center text-blue-800 h-[200px] flex flex-col items-center justify-center">
+                        <i class="ph-barcode text-6xl mb-4 opacity-50"></i>
+                        <p class="font-bold">请使用扫码枪录入</p>
+                        <p class="text-sm opacity-70">光标已自动聚焦</p>
+                    </div>
                 </div>
 
-                <div class="w-full lg:w-1/2 bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-fit">
                     <h2 class="text-lg font-bold mb-4 flex items-center gap-2 text-slate-800"><i class="ph-plus-circle text-blue-600"></i> 新增商品</h2>
                     <div class="space-y-4">
                         <div><label class="text-xs font-bold text-slate-400 block mb-1">条形码</label><input ref="barcodeInput" v-model="entryForm.barcode" @keyup.enter="handleBarcodeEnter" @focus="scrollToInput($event)" type="text" class="w-full p-3 bg-slate-50 rounded-xl font-mono text-lg font-bold border-none focus:ring-2 focus:ring-blue-100" placeholder="扫码枪直接扫"></div>
@@ -218,9 +227,31 @@
                             <div><label class="text-xs font-bold text-slate-400 block mb-1">批发价</label><input v-model="entryForm.wholesale_price" @focus="scrollToInput($event)" type="number" class="w-full p-3 bg-slate-50 rounded-xl font-bold border-none"></div>
                             <div><label class="text-xs font-bold text-slate-400 block mb-1">零售价</label><input v-model="entryForm.retail_price" @focus="scrollToInput($event)" type="number" class="w-full p-3 bg-slate-50 rounded-xl font-bold text-blue-600 border-none"></div>
                         </div>
-                        <button @click="saveProduct" class="w-full py-4 bg-slate-900 text-white rounded-xl font-bold text-lg shadow-lg mt-2 btn-press">确认添加</button>
+                        <button @click="saveProduct" class="w-full py-4 bg-slate-900 text-white rounded-xl font-bold text-lg shadow-lg mt-4 btn-press">确认添加</button>
                     </div>
                 </div>
+
+                <div class="flex flex-col h-[500px] lg:h-auto">
+                    <h3 class="font-bold text-slate-500 mb-3 flex items-center gap-2"><i class="ph-clock-counter-clockwise"></i> 刚刚录入</h3>
+                    <div class="flex-1 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col">
+                        <div class="flex-1 overflow-y-auto p-3 space-y-2">
+                            <div v-for="p in recentProducts" :key="p.id" class="p-3 border border-slate-100 rounded-xl flex justify-between items-center bg-slate-50">
+                                <div>
+                                    <div class="font-bold text-slate-800">{{ p.name }}</div>
+                                    <div class="text-[10px] text-slate-400 font-mono">{{ p.barcode }}</div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-xs text-blue-600 font-bold">零: {{ p.retail_price }}</div>
+                                    <div class="text-[10px] text-slate-400">批: {{ p.wholesale_price }}</div>
+                                </div>
+                            </div>
+                            <div v-if="recentProducts.length === 0" class="h-full flex items-center justify-center text-slate-300 text-sm">
+                                暂无录入记录
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
 
             <div v-if="currentTab === 'orders'" class="space-y-4 max-w-4xl mx-auto">
@@ -375,7 +406,8 @@
                 searchText: '', productFilterStatus: 'active', productFilterCategory: 'all', orderFilterType: 'completed', 
                 editingProduct: null, showQuickAdd: false, 
                 priceMode: 'retail', cashierSearch: '', cart: [], 
-                rankingRange: 'today', viewingOrder: null, syncQueue: JSON.parse(localStorage.getItem('syncQueue') || '[]')
+                rankingRange: 'today', viewingOrder: null, syncQueue: JSON.parse(localStorage.getItem('syncQueue') || '[]'),
+                recentProducts: [] // 刚刚录入
             }
         },
         computed: {
@@ -415,8 +447,6 @@
             window.addEventListener('online', () => { this.isOnline = true; this.processSyncQueue(); });
             window.addEventListener('offline', () => { this.isOnline = false; });
             setInterval(this.processSyncQueue, 10000);
-            
-            // 初始化时聚焦收银框 (方便扫码枪)
             this.$nextTick(() => { if(this.$refs.cashierInput) this.$refs.cashierInput.focus(); });
         },
         methods: {
@@ -424,12 +454,9 @@
             calcStats(ids) { const stats = {}; this.orderItems.forEach(item => { if (ids.has(item.order_id)) { if (!stats[item.barcode]) stats[item.barcode] = { name: item.product_name, barcode: item.barcode, qty: 0 }; stats[item.barcode].qty += item.quantity; } }); return Object.values(stats).sort((a, b) => b.qty - a.qty); },
             getSaoPauloDateString(date) { return date.toLocaleDateString('zh-CN', { timeZone: 'America/Sao_Paulo' }).split('/').join('-'); },
             
-            // 核心：防遮挡滚动
             scrollToInput(event) {
                 const el = event.target;
-                setTimeout(() => {
-                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }, 300);
+                setTimeout(() => { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300);
             },
 
             async toggleScanner(tab) { if (this.scanning) { await this.stopScanner(); } else { this.currentTab = tab; this.scanning = true; await this.$nextTick(); this.startScanner(tab); } },
@@ -449,7 +476,6 @@
             async switchTab(tab) { 
                 if (this.scanning) await this.stopScanner(); 
                 this.currentTab = tab; 
-                // 切换页面时自动聚焦主输入框 (扫码枪优化)
                 this.$nextTick(() => {
                     if (tab === 'cashier' && this.$refs.cashierInput) this.$refs.cashierInput.focus();
                     if (tab === 'entry' && this.$refs.barcodeInput) this.$refs.barcodeInput.focus();
@@ -457,7 +483,6 @@
                 });
             },
             
-            // 核心：模式切换 & 一键变价 (购物车商品不变，价格变)
             switchPriceMode(mode) {
                 this.priceMode = mode;
                 this.cart.forEach(item => {
@@ -509,7 +534,6 @@
                 const finalName = this.getNextName();
                 const priceVal = parseFloat(this.quickAddForm.price);
                 
-                // 补录定价逻辑
                 const retail = this.priceMode === 'retail' ? priceVal : 0;
                 const wholesale = this.priceMode === 'wholesale' ? priceVal : 0;
 
@@ -518,6 +542,10 @@
                 
                 this.products.unshift(newProduct); localStorage.setItem('products', JSON.stringify(this.products)); this.addToSyncQueue('products', 'insert', p);
                 
+                // 存入最近录入
+                this.recentProducts.unshift(p);
+                if (this.recentProducts.length > 10) this.recentProducts.pop();
+
                 this.cart.push({ product_id: tempId, name: p.name, barcode: p.barcode, unit_price: priceVal, quantity: 1 });
                 this.showQuickAdd = false; this.cashierSearch = '';
             },
@@ -530,6 +558,11 @@
                 
                 const p = { barcode: this.entryForm.barcode, name: finalName, category: this.entryForm.category || '默认', wholesale_price: parseFloat(this.entryForm.wholesale_price) || 0, retail_price: parseFloat(this.entryForm.retail_price) || 0, status: 'active' };
                 const tempId = crypto.randomUUID(); this.products.unshift({ ...p, id: tempId }); localStorage.setItem('products', JSON.stringify(this.products)); this.addToSyncQueue('products', 'insert', p);
+                
+                // 存入最近录入
+                this.recentProducts.unshift(p);
+                if (this.recentProducts.length > 10) this.recentProducts.pop();
+
                 this.entryForm = { barcode: '', name: '', category: '', wholesale_price: '', retail_price: '' }; this.$refs.barcodeInput.focus();
             },
             
