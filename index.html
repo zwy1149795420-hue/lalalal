@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>极简收银 Pro (UI优化版)</title>
-    
+
+    <!-- 依赖 -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
@@ -13,39 +14,49 @@
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 
     <style>
-        /* 全局样式 */
-        body { margin: 0; background-color: #f8fafc; -webkit-tap-highlight-color: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-        
-        /* 摄像头基础样式 */
+        /* 全局 */
+        body { margin: 0; background-color: #f8fafc; -webkit-tap-highlight-color: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #0f172a; }
+        [v-cloak] { display: none; }
+
+        /* 摄像头基础样式（浮层或占位） */
         .scan-base { width: 100%; background-color: #000; border-radius: 16px; overflow: hidden; position: relative; }
         #reader video, #manage-reader video, #cashier-reader video { width: 100% !important; height: 100% !important; object-fit: cover !important; border-radius: 16px; }
-        
+
         /* 隐藏滚动条 */
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        
-        /* 交互反馈 */
-        .btn-press:active { transform: scale(0.96); opacity: 0.8; transition: transform 0.1s; }
-        input:focus, select:focus { outline: none; border-color: #3b82f6; ring: 2px; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); scroll-margin-top: 100px; }
-        
-        [v-cloak] { display: none; }
 
-        /* 底部导航栏 */
-        .nav-blur { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-top: 1px solid rgba(0,0,0,0.05); padding-bottom: env(safe-area-inset-bottom); }
-        .nav-item { position: relative; transition: all 0.3s ease; }
+        /* 交互 */
+        .btn-press:active { transform: scale(0.98); opacity: 0.95; transition: transform 0.08s; }
+        input:focus, select:focus { outline: none; box-shadow: 0 0 0 4px rgba(59,130,246,0.08); border-color: rgba(59,130,246,0.2); }
+
+        /* 底部导航 */
+        .nav-blur { background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-top: 1px solid rgba(0,0,0,0.05); padding-bottom: env(safe-area-inset-bottom); }
+        .nav-item { position: relative; transition: all 0.25s ease; }
         .nav-item.active { color: #2563eb; }
         .nav-item.active::after { content: ''; position: absolute; top: -12px; left: 50%; transform: translateX(-50%); width: 40px; height: 4px; background: #2563eb; border-radius: 0 0 4px 4px; }
 
-        @media (min-width: 768px) { .desktop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; } }
+        /* 模态框 */
+        .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: center; z-index: 50; }
+        .modal-panel { width: 92%; max-width: 420px; background: white; border-radius: 14px; padding: 16px; box-shadow: 0 10px 30px rgba(2,6,23,0.2); }
+
+        /* cashier camera 浮层（小） */
+        .cashier-camera-float { position: absolute; top: 8px; left: 8px; right: 8px; height: 160px; border-radius: 12px; overflow: hidden; z-index: 10; box-shadow: 0 6px 18px rgba(2,6,23,0.12); }
+        .cashier-camera-small { height: 100%; width: 100%; }
+
+        @media (min-width: 768px) {
+            .desktop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        }
     </style>
 </head>
 <body>
 
 <div id="app" v-cloak class="h-screen w-full flex flex-col md:flex-row bg-slate-50 overflow-hidden text-slate-800">
 
+    <!-- 侧栏（桌面可见） -->
     <aside class="hidden md:flex w-64 bg-slate-900 text-white flex-col shrink-0">
         <div class="p-6 border-b border-slate-800">
-            <h1 class="text-xl font-bold flex items-center gap-2"><i class="ph-storefront text-blue-500"></i> 收银系统 Pro</h1>
+            <h1 class="text-xl font-bold flex items-center gap-2"><i class="ph-storefront text-blue-400"></i> 收银系统 Pro</h1>
             <div class="flex items-center gap-2 mt-2 text-xs text-slate-400">
                 <div :class="isOnline ? 'bg-green-500' : 'bg-red-500'" class="w-2 h-2 rounded-full"></div>
                 <span>{{ isOnline ? '圣保罗已连接' : '离线模式' }}</span>
@@ -60,7 +71,6 @@
     </aside>
 
     <main class="flex-1 flex flex-col h-full relative overflow-hidden">
-        
         <header class="md:hidden h-14 bg-white px-4 shadow-sm shrink-0 flex justify-between items-center z-20">
             <h1 class="font-bold text-lg text-slate-800">{{ currentTitle }}</h1>
             <div class="flex items-center gap-2">
@@ -70,18 +80,37 @@
         </header>
 
         <div ref="mainContent" class="flex-1 overflow-y-auto hide-scrollbar p-3 md:p-8 bg-slate-50/50 pb-28 md:pb-8">
-            
-            <div v-if="currentTab === 'cashier'" class="h-full flex flex-col md:flex-row gap-4">
-                
-                <div v-if="scanning" class="w-full md:w-[350px] shrink-0 flex flex-col gap-3 transition-all">
-                    <div class="scan-base h-[250px] md:h-full shadow-inner border border-slate-200 relative bg-black rounded-2xl overflow-hidden">
-                        <div id="cashier-reader" class="w-full h-full"></div>
-                        <button @click="stopScanner" class="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white/20 backdrop-blur text-white px-4 py-2 rounded-full text-sm font-bold border border-white/30">关闭摄像头</button>
-                    </div>
+
+            <!-- 收银 Tab -->
+            <div v-if="currentTab === 'cashier'" class="h-full flex flex-col md:flex-row gap-4 relative">
+                <!-- 摄像头浮层（不会隐藏清单） -->
+                <div v-show="scanning && scanTab==='cashier'" class="cashier-camera-float md:hidden">
+                    <div id="cashier-reader" class="cashier-camera-small"></div>
+                    <button @click="stopScanner" class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-white/90 text-slate-800 px-3 py-1 rounded-full text-sm font-bold border border-slate-200">关闭摄像头</button>
                 </div>
 
+                <!-- 左侧：搜索/扫码输入（在桌面时显示摄像头旁边） -->
+                <div class="w-full md:w-[350px] shrink-0 flex flex-col gap-3 relative">
+                    <!-- 在桌面上，显示固定摄像头容器（不遮挡） -->
+                    <div v-show="scanning && scanTab==='cashier' && !isMobile" class="scan-base h-[260px] md:h-[260px] shadow-inner border border-slate-200 relative bg-black rounded-2xl overflow-hidden">
+                        <div id="cashier-reader-desktop" class="w-full h-full"></div>
+                        <button @click="stopScanner" class="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white/20 backdrop-blur text-white px-4 py-2 rounded-full text-sm font-bold border border-white/30">关闭摄像头</button>
+                    </div>
+
+                    <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100">
+                        <div class="relative">
+                            <input ref="cashierInput" v-model="cashierSearch" @keyup.enter="addToCartByInput" @focus="scrollToInput($event)" type="text" placeholder="扫码枪直接扫 / 输入名称" class="w-full p-4 pl-12 bg-slate-50 rounded-xl font-bold text-lg border border-transparent focus:bg-white focus:border-blue-200 transition-all">
+                            <i class="ph-barcode absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl"></i>
+                            <button @click="toggleScanner('cashier')" :class="scanning && scanTab==='cashier' ? 'text-blue-600 bg-blue-50' : 'text-slate-500 bg-slate-100'" class="absolute right-2 top-2 p-2 rounded-lg transition-colors btn-press">
+                                <i class="ph-qr-code text-xl"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- 右侧：当前清单（始终显示） -->
                 <div class="flex-1 flex flex-col h-full overflow-hidden gap-3">
-                    
                     <div class="grid grid-cols-2 gap-2 bg-white p-1.5 rounded-2xl shadow-sm border border-slate-100 shrink-0">
                         <button @click="switchPriceMode('retail')" :class="priceMode === 'retail' ? 'bg-blue-600 text-white shadow' : 'text-slate-500 hover:bg-slate-50'" class="py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2">
                             <i class="ph-tag"></i> 零售模式
@@ -93,11 +122,8 @@
 
                     <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 shrink-0">
                         <div class="relative">
-                            <input ref="cashierInput" v-model="cashierSearch" @keyup.enter="addToCartByInput" @focus="scrollToInput($event)" type="text" placeholder="扫码枪直接扫 / 输入名称" class="w-full p-4 pl-12 bg-slate-50 rounded-xl font-bold text-lg border border-transparent focus:bg-white focus:border-blue-200 transition-all">
+                            <input v-model="cashierSearch" @keyup.enter="addToCartByInput" @focus="scrollToInput($event)" type="text" placeholder="扫码枪直接扫 / 输入名称" class="w-full p-4 pl-12 bg-slate-50 rounded-xl font-bold text-lg border border-transparent focus:bg-white focus:border-blue-200 transition-all">
                             <i class="ph-barcode absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl"></i>
-                            <button v-if="isMobile" @click="toggleScanner('cashier')" :class="scanning ? 'text-blue-600 bg-blue-50' : 'text-slate-500 bg-slate-100'" class="absolute right-2 top-2 p-2 rounded-lg transition-colors">
-                                <i class="ph-qr-code text-xl"></i>
-                            </button>
                         </div>
                     </div>
 
@@ -109,7 +135,7 @@
                             </div>
                             <button @click="clearCart" class="text-red-500 text-sm font-bold hover:bg-red-50 px-2 py-1 rounded" v-if="cart.length > 0">清空</button>
                         </div>
-                        
+
                         <div class="flex-1 overflow-y-auto p-3 space-y-2">
                             <div v-if="cart.length === 0" class="h-full flex flex-col items-center justify-center text-slate-300">
                                 <i class="ph-shopping-cart text-6xl mb-4 text-slate-200"></i>
@@ -131,12 +157,12 @@
                                     </div>
                                     <div class="text-right">
                                         <div class="text-[10px] text-slate-400 mb-0.5">单价 ({{ priceMode==='retail'?'零':'批' }})</div>
-                                        <input v-model="item.unit_price" @focus="scrollToInput($event)" type="number" class="w-20 text-right font-bold text-lg bg-transparent border-b border-transparent focus:border-blue-500 focus:bg-white rounded px-1 transition-all">
+                                        <input v-model.number="item.unit_price" @focus="scrollToInput($event)" type="number" class="w-20 text-right font-bold text-lg bg-transparent border-b border-transparent focus:border-blue-500 focus:bg-white rounded px-1 transition-all">
                                     </div>
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div class="p-4 border-t border-slate-100 bg-slate-50 flex flex-col gap-3 shrink-0">
                             <div class="flex justify-between items-end">
                                 <span class="text-slate-500 text-sm">合计金额</span>
@@ -150,19 +176,20 @@
                 </div>
             </div>
 
+            <!-- 管理 Tab -->
             <div v-if="currentTab === 'manage'" class="space-y-4 max-w-7xl mx-auto">
                 <div class="flex gap-2 bg-white p-2 rounded-xl shadow-sm border border-slate-100 items-center">
                     <div class="relative flex-1">
                         <i class="ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
                         <input ref="manageInput" v-model="searchText" @focus="scrollToInput($event)" type="text" placeholder="扫码枪搜索 / 输入..." class="w-full pl-9 p-3 bg-slate-50 rounded-lg text-sm border-none focus:ring-2 focus:ring-blue-100 font-bold">
                     </div>
-                    <button v-if="isMobile" @click="toggleScanner('manage')" :class="scanning ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-600'" class="p-3 rounded-lg flex items-center gap-2 font-bold btn-press">
+                    <button v-if="isMobile" @click="toggleScanner('manage')" :class="scanning && scanTab==='manage' ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-600'" class="p-3 rounded-lg flex items-center gap-2 font-bold btn-press">
                         <i class="ph-qr-code text-xl"></i>
-                        <span class="hidden md:inline">{{ scanning ? '关闭' : '扫码' }}</span>
+                        <span class="hidden md:inline">{{ scanning && scanTab==='manage' ? '关闭' : '扫码' }}</span>
                     </button>
                 </div>
 
-                <div v-if="isMobile && scanning && currentTab === 'manage'" class="scan-base h-[160px] shadow-inner mb-2">
+                <div v-if="isMobile && scanning && scanTab === 'manage'" class="scan-base h-[160px] shadow-inner mb-2">
                     <div id="manage-reader" class="w-full h-full"></div>
                 </div>
 
@@ -194,30 +221,16 @@
                 </div>
             </div>
 
+            <!-- 录入 Tab -->
             <div v-if="currentTab === 'entry'" class="flex flex-col max-w-7xl mx-auto gap-4">
-                
-                <div v-if="isMobile" class="shrink-0">
-                    <div class="scan-base shadow-lg h-[200px] relative rounded-2xl overflow-hidden bg-black">
-                        <div v-show="scanning" class="w-full h-full">
-                             <div id="reader" class="w-full h-full"></div>
-                        </div>
-                        <div v-if="!scanning" class="absolute inset-0 flex flex-col items-center justify-center text-slate-500">
-                            <i class="ph-camera-slash text-5xl mb-2"></i><p>摄像头已关闭</p>
-                        </div>
-                    </div>
-                    <button @click="toggleScanner('entry')" class="w-full mt-3 py-3 bg-slate-900 text-white rounded-xl font-bold shadow-xl flex items-center justify-center gap-2 btn-press">
-                        <i :class="scanning ? 'ph-x' : 'ph-camera'" class="text-xl"></i> {{ scanning ? '停止' : '扫描' }}
-                    </button>
-                </div>
-
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
-                    
-                    <div class="bg-white p-5 lg:p-6 rounded-2xl shadow-sm border border-slate-100">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 items-start">
+                    <!-- 新增商品（左） -->
+                    <div class="bg-white p-5 lg:p-6 rounded-2xl shadow-sm border border-slate-100 min-h-[300px]">
                         <h2 class="text-lg font-bold mb-5 flex items-center gap-2 text-slate-800 shrink-0">
                             <div class="bg-blue-100 p-1.5 rounded-lg text-blue-600"><i class="ph-plus-circle text-xl"></i></div>
                             新增商品
                         </h2>
-                        
+
                         <div class="space-y-4">
                             <div>
                                 <label class="text-xs font-bold text-slate-400 block mb-1.5">条形码</label>
@@ -226,19 +239,20 @@
                                     <i class="ph-barcode absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xl"></i>
                                 </div>
                             </div>
-                            
+
                             <div>
                                 <label class="text-xs font-bold text-slate-400 block mb-1.5">商品名称</label>
                                 <input v-model="entryForm.name" type="text" class="w-full p-3 bg-slate-50 rounded-xl border border-transparent focus:bg-white focus:border-blue-500 transition-all" placeholder="自动生成: 未命名X">
                             </div>
-                            
+
                             <div>
                                 <label class="text-xs font-bold text-slate-400 block mb-1.5">分类</label>
                                 <input list="category-list" v-model="entryForm.category" type="text" class="w-full p-3 bg-slate-50 rounded-xl border border-transparent focus:bg-white focus:border-blue-500 font-bold transition-all" placeholder="例如: 饮料">
                                 <datalist id="category-list"><option v-for="cat in allCategories" :value="cat"></option></datalist>
                             </div>
-                            
-                            <div class="grid grid-cols-2 gap-4">
+
+                            <!-- 改为两行显示：批发价 和 零售价 各占一行（增加模块高度） -->
+                            <div class="space-y-3">
                                 <div>
                                     <label class="text-xs font-bold text-slate-400 block mb-1.5">批发价</label>
                                     <div class="relative">
@@ -246,6 +260,7 @@
                                         <input v-model="entryForm.wholesale_price" type="number" class="w-full pl-8 p-3 bg-slate-50 rounded-xl font-bold border border-transparent focus:bg-white focus:border-blue-500 transition-all">
                                     </div>
                                 </div>
+
                                 <div>
                                     <label class="text-xs font-bold text-slate-400 block mb-1.5">零售价</label>
                                     <div class="relative">
@@ -261,13 +276,14 @@
                         </div>
                     </div>
 
-                    <div class="bg-white p-5 lg:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col">
+                    <!-- 刚刚录入（右） 对齐到左侧高度 -->
+                    <div class="bg-white p-5 lg:p-6 rounded-2xl shadow-sm border border-slate-100 min-h-[300px] flex flex-col">
                         <h3 class="text-lg font-bold mb-5 flex items-center gap-2 text-slate-800 shrink-0">
                             <div class="bg-orange-100 p-1.5 rounded-lg text-orange-600"><i class="ph-clock-counter-clockwise text-xl"></i></div>
                             刚刚录入
                         </h3>
-                        
-                        <div class="space-y-2">
+
+                        <div class="space-y-2 overflow-auto">
                             <div v-for="p in recentProducts" :key="p.id" class="p-3 border border-slate-100 rounded-xl flex justify-between items-center bg-slate-50 hover:bg-blue-50 transition-colors group">
                                 <div>
                                     <div class="font-bold text-slate-800 text-base">{{ p.name }}</div>
@@ -278,23 +294,23 @@
                                     <div class="text-[10px] text-slate-400">批: {{ p.wholesale_price }}</div>
                                 </div>
                             </div>
-                            
+
                             <div v-if="recentProducts.length === 0" class="py-10 flex flex-col items-center justify-center text-slate-300 gap-2">
                                 <i class="ph-clipboard-text text-4xl opacity-20"></i>
                                 <span class="text-sm">暂无本次录入记录</span>
                             </div>
                         </div>
                     </div>
-
                 </div>
             </div>
 
+            <!-- 报表 Tab（保持原样） -->
             <div v-if="currentTab === 'orders'" class="space-y-4 max-w-4xl mx-auto">
                 <div class="bg-blue-600 p-6 rounded-2xl shadow-lg text-white">
                     <div class="text-blue-100 text-xs font-bold uppercase tracking-wider">今日销售额 (圣保罗)</div>
                     <div class="text-4xl font-black mt-2">R$ {{ todaySales.toFixed(2) }}</div>
                 </div>
-                
+
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                     <div class="p-3 border-b border-slate-100 font-bold text-sm text-slate-700 bg-slate-50 flex items-center justify-between">
                         <span>🏆 销量排行</span>
@@ -339,8 +355,10 @@
                     </div>
                 </div>
             </div>
+
         </div>
 
+        <!-- 手机底部导航 -->
         <nav class="md:hidden fixed bottom-0 left-0 right-0 h-[80px] nav-blur flex justify-around items-center z-40 text-slate-400">
             <div @click="switchTab('cashier')" :class="{'active': currentTab==='cashier'}" class="nav-item flex flex-col items-center w-1/4 btn-press"><i class="ph-barcode text-2xl mb-1"></i><span class="text-[10px] font-bold">收银</span></div>
             <div @click="switchTab('entry')" :class="{'active': currentTab==='entry'}" class="nav-item flex flex-col items-center w-1/4 btn-press"><i class="ph-plus-circle text-2xl mb-1"></i><span class="text-[10px] font-bold">录入</span></div>
@@ -349,6 +367,7 @@
         </nav>
     </main>
 
+    <!-- 编辑商品 Modal -->
     <div v-if="editingProduct" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div class="bg-white w-full max-w-sm rounded-2xl p-5 shadow-2xl animate-fade-in-up">
             <h3 class="font-bold text-lg mb-4 text-slate-800">编辑商品</h3>
@@ -357,8 +376,8 @@
                 <div><label class="text-xs font-bold text-slate-400">名称</label><input v-model="editingProduct.name" @focus="scrollToInput($event)" class="w-full p-3 border border-slate-200 rounded-lg"></div>
                 <div><label class="text-xs font-bold text-slate-400">分类</label><input list="category-list-edit" v-model="editingProduct.category" @focus="scrollToInput($event)" class="w-full p-3 border border-slate-200 rounded-lg font-bold" placeholder="例如: 饮料"><datalist id="category-list-edit"><option v-for="cat in allCategories" :key="cat" :value="cat"></option></datalist></div>
                 <div class="flex gap-3">
-                    <div class="flex-1"><label class="text-xs font-bold text-slate-400">批发价</label><input v-model="editingProduct.wholesale_price" @focus="scrollToInput($event)" type="number" class="w-full p-3 border border-slate-200 rounded-lg font-bold"></div>
-                    <div class="flex-1"><label class="text-xs font-bold text-slate-400">零售价</label><input v-model="editingProduct.retail_price" @focus="scrollToInput($event)" type="number" class="w-full p-3 border border-slate-200 rounded-lg font-bold text-blue-600"></div>
+                    <div class="flex-1"><label class="text-xs font-bold text-slate-400">批发价</label><input v-model.number="editingProduct.wholesale_price" @focus="scrollToInput($event)" type="number" class="w-full p-3 border border-slate-200 rounded-lg font-bold"></div>
+                    <div class="flex-1"><label class="text-xs font-bold text-slate-400">零售价</label><input v-model.number="editingProduct.retail_price" @focus="scrollToInput($event)" type="number" class="w-full p-3 border border-slate-200 rounded-lg font-bold text-blue-600"></div>
                 </div>
                 <div>
                     <label class="text-xs font-bold text-slate-400">状态</label>
@@ -376,6 +395,7 @@
         </div>
     </div>
 
+    <!-- 订单详情 Modal -->
     <div v-if="viewingOrder" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div class="bg-white w-full max-w-sm rounded-2xl p-5 shadow-2xl animate-fade-in-up flex flex-col max-h-[80vh]">
             <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
@@ -395,22 +415,43 @@
         </div>
     </div>
 
-    <div v-if="showQuickAdd" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-start pt-[10%] justify-center p-4">
-        <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-fade-in-up">
-            <div class="text-center mb-6">
-                <h3 class="font-bold text-xl text-slate-800 mb-1">商品未录入</h3>
-                <p class="text-xs text-slate-400">条码: <span class="font-mono">{{ quickAddForm.barcode }}</span></p>
-            </div>
-            <div class="mb-6">
-                <label class="text-xs font-bold text-slate-500 uppercase block mb-2">请输入{{ priceMode==='retail'?'零售':'批发' }}单价</label>
-                <div class="relative">
-                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-lg">R$</span>
-                    <input ref="quickPriceInput" v-model="quickAddForm.price" @focus="scrollToInput($event)" type="number" class="w-full p-4 pl-12 bg-slate-50 rounded-xl font-bold text-3xl text-slate-800 border-2 border-transparent focus:bg-white focus:border-blue-600 transition-all text-center" placeholder="0.00">
+    <!-- Entry 自动弹窗：扫码后直接弹出新增商品小窗（与 quickAdd 区别） -->
+    <div v-if="entryModalVisible" class="modal-backdrop z-60">
+        <div class="modal-panel">
+            <h3 class="font-bold text-lg mb-2">新增商品</h3>
+            <p class="text-xs text-slate-500 mb-4">条码: <span class="font-mono">{{ entryForm.barcode }}</span></p>
+
+            <div class="space-y-3">
+                <div>
+                    <label class="text-xs font-bold text-slate-400 block mb-1.5">商品名称</label>
+                    <input v-model="entryForm.name" type="text" class="w-full p-3 bg-slate-50 rounded-xl border border-transparent focus:bg-white focus:border-blue-500">
                 </div>
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-                <button @click="showQuickAdd = false" class="py-3.5 bg-slate-100 text-slate-600 rounded-xl font-bold">取消</button>
-                <button @click="saveQuickAdd" class="py-3.5 bg-slate-900 text-white rounded-xl font-bold shadow-lg">确认入库</button>
+
+                <div>
+                    <label class="text-xs font-bold text-slate-400 block mb-1.5">分类</label>
+                    <input list="category-list" v-model="entryForm.category" type="text" class="w-full p-3 bg-slate-50 rounded-xl border border-transparent focus:bg-white focus:border-blue-500">
+                </div>
+
+                <div>
+                    <label class="text-xs font-bold text-slate-400 block mb-1.5">批发价</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">R$</span>
+                        <input v-model.number="entryForm.wholesale_price" type="number" class="w-full pl-8 p-3 bg-slate-50 rounded-xl font-bold border border-transparent focus:bg-white focus:border-blue-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-xs font-bold text-slate-400 block mb-1.5">零售价</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">R$</span>
+                        <input v-model.number="entryForm.retail_price" type="number" class="w-full pl-8 p-3 bg-slate-50 rounded-xl font-bold text-blue-600 border border-transparent focus:bg-white focus:border-blue-500">
+                    </div>
+                </div>
+
+                <div class="flex gap-2">
+                    <button @click="confirmEntryAdd" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold">保存并入库</button>
+                    <button @click="cancelEntryAdd" class="flex-1 py-3 bg-slate-100 rounded-xl font-bold text-slate-600">取消</button>
+                </div>
             </div>
         </div>
     </div>
@@ -419,30 +460,35 @@
 
 <script>
     const { createClient } = supabase;
-    
+
     // ==========================================
-    // ⚠️⚠️ 填入你的配置 ⚠️⚠️
+    // ⚠️⚠️ 填入你的 Supabase 配置（如果需要在线同步）
     // ==========================================
-    const SUPABASE_URL = 'https://ovhjhqfjygwzvfpaiejb.supabase.co'; 
+    const SUPABASE_URL = 'https://ovhjhqfjygwzvfpaiejb.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92aGpocWZqeWd3enZmcGFpZWpiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NzYzNTk4NywiZXhwIjoyMDgzMjExOTg3fQ.GYw1xicPS93oQIqOJNaqzYlq7zTcst_jo5B7JEQYZCE';
     // ==========================================
 
     const app = Vue.createApp({
         data() {
             return {
-                supabase: null, isOnline: navigator.onLine, 
+                supabase: null,
+                isOnline: navigator.onLine,
                 isMobile: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
-                currentTab: 'cashier', 
-                products: [], orders: [], orderItems: [], 
+                currentTab: 'cashier',
+                products: [], orders: [], orderItems: [],
                 entryForm: { barcode: '', name: '', category: '', wholesale_price: '', retail_price: '' },
-                quickAddForm: { barcode: '', price: '' }, 
-                scanning: false, html5QrCode: null, scanError: '', lastScanTime: 0, scanCooldown: 2000, justScanned: false,
-                searchText: '', productFilterStatus: 'active', productFilterCategory: 'all', orderFilterType: 'completed', 
-                editingProduct: null, showQuickAdd: false, 
-                priceMode: 'retail', cashierSearch: '', cart: [], 
+                quickAddForm: { barcode: '', price: '' },
+                scanning: false,
+                scanTab: null, // 当前是哪个 tab 在扫码
+                html5QrCode: null,
+                scanError: '',
+                lastScanTime: 0, scanCooldown: 600, justScanned: false,
+                searchText: '', productFilterStatus: 'active', productFilterCategory: 'all', orderFilterType: 'completed',
+                editingProduct: null, showQuickAdd: false, entryModalVisible: false,
+                priceMode: 'retail', cashierSearch: '', cart: [],
                 rankingRange: 'today', viewingOrder: null, syncQueue: JSON.parse(localStorage.getItem('syncQueue') || '[]'),
-                recentProducts: [] 
-            }
+                recentProducts: [], inputLock: false
+            };
         },
         computed: {
             currentTitle() { return { entry: '商品录入', manage: '商品管理', cashier: '前台收银', orders: '销售报表' }[this.currentTab]; },
@@ -451,13 +497,12 @@
                 let list = this.products;
                 if (this.productFilterStatus !== 'all') list = list.filter(p => p.status === this.productFilterStatus);
                 if (this.productFilterCategory !== 'all') list = list.filter(p => (p.category || '默认') === this.productFilterCategory);
-                if (this.searchText) { const low = this.searchText.toLowerCase(); list = list.filter(p => p.name?.toLowerCase().includes(low) || p.barcode.includes(low)); }
+                if (this.searchText) { const low = this.searchText.toLowerCase(); list = list.filter(p => (p.name || '').toLowerCase().includes(low) || (p.barcode || '').includes(low)); }
                 return list;
             },
             filteredOrdersList() { return this.orders.filter(o => o.status === this.orderFilterType).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); },
-            cartTotalPrice() { return this.cart.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0).toFixed(2); },
+            cartTotalPrice() { return this.cart.reduce((sum, item) => sum + (Number(item.unit_price || 0) * item.quantity), 0).toFixed(2); },
             cartTotalQty() { return this.cart.reduce((sum, item) => sum + item.quantity, 0); },
-            sortedOrders() { return [...this.orders].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); },
             viewingOrderItems() { if (!this.viewingOrder) return []; return this.orderItems.filter(i => i.order_id === this.viewingOrder.id); },
             todaySales() { const spDate = this.getSaoPauloDateString(new Date()); return this.orders.filter(o => o.status === 'completed' && this.formatDate(o.created_at).includes(spDate)).reduce((sum, o) => sum + o.total_price, 0); },
             productSalesStats() {
@@ -468,51 +513,154 @@
                     return this.calcStats(validOrderIds);
                 } else {
                     const spNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
-                    if (this.rankingRange === 'week') { const day = spNow.getDay() || 7; spNow.setHours(0,0,0,0); spNow.setDate(spNow.getDate() - day + 1); startTime = spNow; } 
+                    if (this.rankingRange === 'week') { const day = spNow.getDay() || 7; spNow.setHours(0,0,0,0); spNow.setDate(spNow.getDate() - day + 1); startTime = spNow; }
                     else if (this.rankingRange === 'month') { spNow.setDate(1); spNow.setHours(0,0,0,0); startTime = spNow; }
                     const validOrderIds = new Set(this.orders.filter(o => o.status === 'completed' && new Date(o.created_at) >= startTime).map(o => o.id));
                     return this.calcStats(validOrderIds);
                 }
             }
         },
-        async mounted() {
+        mounted() {
             this.supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            this.loadLocalData(); await this.fetchData();
+            this.loadLocalData();
+            this.fetchData().catch(()=>{});
             window.addEventListener('online', () => { this.isOnline = true; this.processSyncQueue(); });
             window.addEventListener('offline', () => { this.isOnline = false; });
             setInterval(this.processSyncQueue, 10000);
-            
-            this.$nextTick(() => { 
-                if(this.$refs.cashierInput && !this.isMobile) this.$refs.cashierInput.focus(); 
+
+            this.$nextTick(() => {
+                if (this.$refs.cashierInput && !this.isMobile) this.$refs.cashierInput.focus();
             });
         },
         methods: {
-            playBeep() { const a = new Audio("data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU"); a.play().catch(()=>{}); },
-            calcStats(ids) { const stats = {}; this.orderItems.forEach(item => { if (ids.has(item.order_id)) { if (!stats[item.barcode]) stats[item.barcode] = { name: item.product_name, barcode: item.barcode, qty: 0 }; stats[item.barcode].qty += item.quantity; } }); return Object.values(stats).sort((a, b) => b.qty - a.qty); },
-            getSaoPauloDateString(date) { return date.toLocaleDateString('zh-CN', { timeZone: 'America/Sao_Paulo' }).split('/').join('-'); },
-            
-            scrollToInput(event) {
-                const el = event.target;
-                setTimeout(() => { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300);
+            /* ===== beep 使用 WebAudio（更可靠） ===== */
+            playBeep() {
+                try {
+                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    const o = ctx.createOscillator();
+                    const g = ctx.createGain();
+                    o.type = 'sine';
+                    o.frequency.value = 1200;
+                    g.gain.value = 0.0001;
+                    o.connect(g);
+                    g.connect(ctx.destination);
+                    o.start();
+
+                    // 渐增再渐退，避免突兀（短促滴）
+                    g.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.005);
+                    g.gain.linearRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+                    setTimeout(() => { try { o.stop(); ctx.close(); } catch (e) {} }, 160);
+                } catch (e) {
+                    // fallback
+                    const a = new Audio();
+                    // 频率播放受限，尝试空操作以避免错误
+                    try { a.play().catch(()=>{}); } catch(e){}
+                }
             },
 
-            async toggleScanner(tab) { if (this.scanning) { await this.stopScanner(); } else { this.currentTab = tab; this.scanning = true; await this.$nextTick(); this.startScanner(tab); } },
+            calcStats(ids) { const stats = {}; this.orderItems.forEach(item => { if (ids.has(item.order_id)) { if (!stats[item.barcode]) stats[item.barcode] = { name: item.product_name, barcode: item.barcode, qty: 0 }; stats[item.barcode].qty += item.quantity; } }); return Object.values(stats).sort((a, b) => b.qty - a.qty); },
+            getSaoPauloDateString(date) { return date.toLocaleDateString('zh-CN', { timeZone: 'America/Sao_Paulo' }).split('/').join('-'); },
+
+            scrollToInput(event) {
+                const el = event.target;
+                if (!this.isMobile) return;
+                const rect = el.getBoundingClientRect();
+                const offset = window.scrollY + rect.top - 120;
+                setTimeout(() => {
+                    window.scrollTo({ top: offset, behavior: 'smooth' });
+                }, 250);
+            },
+
+            /* ===== Scanner 管理：每次 start 创建新的实例，stop 时彻底 clear ===== */
+            async toggleScanner(tab) {
+                if (this.scanning && this.scanTab === tab) {
+                    await this.stopScanner();
+                } else {
+                    // 如果当前在别的 tab 的摄像头开启，先 stop
+                    if (this.scanning && this.scanTab !== tab) await this.stopScanner();
+                    this.scanTab = tab;
+                    await this.startScanner(tab);
+                }
+            },
+
             async startScanner(tab) {
-                this.scanError = ''; const elementId = tab === 'entry' ? "reader" : (tab === 'manage' ? 'manage-reader' : "cashier-reader");
-                if (!this.html5QrCode) { this.html5QrCode = new Html5Qrcode(elementId); }
-                try { this.scanning = true; await this.html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, (decodedText) => this.onScanSuccess(decodedText, tab), (errorMessage) => {}); } catch (err) { this.scanning = false; this.scanError = "摄像头启动失败"; this.html5QrCode = null; }
+                this.scanError = '';
+                const elementId = tab === 'entry' ? 'reader' : (tab === 'manage' ? 'manage-reader' : (tab === 'cashier' ? (this.isMobile ? 'cashier-reader' : 'cashier-reader-desktop') : 'reader'));
+                // 每次新建实例，确保绑定正确的 DOM
+                try {
+                    this.html5QrCode = new Html5Qrcode(elementId);
+                    this.scanning = true;
+
+                    // 更稳的配置（适合条形码/一维码）
+                    const config = {
+                        fps: 15,
+                        qrbox: tab === 'cashier' && !this.isMobile ? { width: 400, height: 200 } : { width: 280, height: 160 },
+                        aspectRatio: 1.6,
+                        experimentalFeatures: { useBarcodeDetectorIfSupported: true },
+                        // disableFlip recommended for many devices but keep default
+                    };
+
+                    await this.html5QrCode.start(
+                        { facingMode: "environment" },
+                        config,
+                        (decodedText) => { this.onScanSuccess(decodedText, tab); },
+                        (errorMessage) => { /* 忽略临时错误 */ }
+                    );
+                } catch (err) {
+                    console.error('startScanner error', err);
+                    this.scanning = false;
+                    this.scanError = "摄像头启动失败";
+                    try { if (this.html5QrCode) { this.html5QrCode.clear(); } } catch(e){}
+                    this.html5QrCode = null;
+                }
             },
-            async stopScanner() { if (this.html5QrCode && this.html5QrCode.isScanning) { try { await this.html5QrCode.stop(); this.html5QrCode.clear(); } catch (e) {} } this.html5QrCode = null; this.scanning = false; this.justScanned = false; },
+
+            async stopScanner() {
+                try {
+                    if (this.html5QrCode) {
+                        if (this.html5QrCode.isScanning) {
+                            await this.html5QrCode.stop();
+                        }
+                        try { this.html5QrCode.clear(); } catch(e){}
+                    }
+                } catch (e) { console.warn(e); }
+                this.html5QrCode = null;
+                this.scanning = false;
+                this.scanTab = null;
+                this.justScanned = false;
+            },
+
             onScanSuccess(decodedText, tab) {
-                const now = Date.now(); if (now - this.lastScanTime < this.scanCooldown) return; this.lastScanTime = now; this.playBeep(); this.justScanned = true; setTimeout(() => { this.justScanned = false; }, this.scanCooldown);
-                if (tab === 'entry') { this.entryForm.barcode = decodedText; this.handleBarcodeEnter(); } 
-                else if (tab === 'cashier') { this.cashierSearch = decodedText; this.addToCartByInput(); }
-                else if (tab === 'manage') { this.searchText = decodedText; }
+                const now = Date.now();
+                if (now - this.lastScanTime < this.scanCooldown) return;
+                this.lastScanTime = now;
+                this.justScanned = true;
+                setTimeout(() => { this.justScanned = false; }, this.scanCooldown);
+
+                // beep (确认声)
+                try { this.playBeep(); } catch (e) {}
+
+                if (tab === 'entry') {
+                    // 直接填入 entryForm 并弹窗新增
+                    this.entryForm.barcode = decodedText;
+                    // 清空其他字段以便快速录入
+                    this.entryForm.name = '';
+                    this.entryForm.category = '';
+                    this.entryForm.wholesale_price = '';
+                    this.entryForm.retail_price = '';
+                    this.entryModalVisible = true;
+                    this.$nextTick(() => { /* focus name 输入 */ const el = document.querySelector('.modal-panel input'); if (el) el.focus(); });
+                } else if (tab === 'cashier') {
+                    this.cashierSearch = decodedText;
+                    this.addToCartByInput();
+                } else if (tab === 'manage') {
+                    this.searchText = decodedText;
+                }
             },
-            
-            async switchTab(tab) { 
-                if (this.scanning) await this.stopScanner(); 
-                this.currentTab = tab; 
+
+            async switchTab(tab) {
+                if (this.scanning) await this.stopScanner();
+                this.currentTab = tab;
                 this.$nextTick(() => {
                     if (!this.isMobile) {
                         if (tab === 'cashier' && this.$refs.cashierInput) this.$refs.cashierInput.focus();
@@ -521,7 +669,7 @@
                     }
                 });
             },
-            
+
             switchPriceMode(mode) {
                 this.priceMode = mode;
                 this.cart.forEach(item => {
@@ -532,96 +680,129 @@
                 });
             },
 
-            loadLocalData() { this.products = JSON.parse(localStorage.getItem('products') || '[]'); this.orders = JSON.parse(localStorage.getItem('orders') || '[]'); this.orderItems = JSON.parse(localStorage.getItem('orderItems') || '[]'); },
+            loadLocalData() {
+                this.products = JSON.parse(localStorage.getItem('products') || '[]');
+                this.orders = JSON.parse(localStorage.getItem('orders') || '[]');
+                this.orderItems = JSON.parse(localStorage.getItem('orderItems') || '[]');
+                this.recentProducts = JSON.parse(localStorage.getItem('recentProducts') || '[]');
+            },
+
             async fetchData() {
                 if (!this.isOnline) return;
-                const { data: p } = await this.supabase.from('products').select('*'); if (p) { this.products = p; localStorage.setItem('products', JSON.stringify(p)); }
-                const { data: o } = await this.supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(100); if (o) { this.orders = o; localStorage.setItem('orders', JSON.stringify(o)); }
-                const { data: oi } = await this.supabase.from('order_items').select('*').limit(1000); if (oi) { this.orderItems = oi; localStorage.setItem('orderItems', JSON.stringify(oi)); }
+                try {
+                    const { data: p } = await this.supabase.from('products').select('*');
+                    if (p) { this.products = p; localStorage.setItem('products', JSON.stringify(p)); }
+                    const { data: o } = await this.supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(100);
+                    if (o) { this.orders = o; localStorage.setItem('orders', JSON.stringify(o)); }
+                    const { data: oi } = await this.supabase.from('order_items').select('*').limit(1000);
+                    if (oi) { this.orderItems = oi; localStorage.setItem('orderItems', JSON.stringify(oi)); }
+                } catch(e) {
+                    console.warn('fetchData error', e);
+                }
             },
-            
-            addToCartByInput() {
-                const term = this.cashierSearch.trim(); if (!term) return;
+
+            async addToCartByInput() {
+                if (this.inputLock) return;
+                this.inputLock = true;
+                setTimeout(() => { this.inputLock = false; }, 300);
+
+                const term = String(this.cashierSearch || '').trim();
+                if (!term) return;
+
                 let p = this.products.find(x => x.barcode === term && x.status === 'active');
                 if (!p) p = this.products.find(x => x.name === term && x.status === 'active');
-                
+
                 if (p) {
                     const existing = this.cart.find(i => i.product_id === p.id);
-                    if (existing) existing.quantity++; 
-                    else this.cart.push({ 
-                        product_id: p.id, name: p.name, barcode: p.barcode, 
-                        unit_price: this.priceMode === 'retail' ? p.retail_price : p.wholesale_price, 
-                        quantity: 1 
+                    if (existing) existing.quantity++;
+                    else this.cart.push({
+                        product_id: p.id, name: p.name, barcode: p.barcode,
+                        unit_price: this.priceMode === 'retail' ? Number(p.retail_price || 0) : Number(p.wholesale_price || 0),
+                        quantity: 1
                     });
                     this.cashierSearch = '';
                 } else {
+                    // quick add modal (cashier 快速入库)
                     this.quickAddForm = { barcode: term, price: '' };
                     this.showQuickAdd = true;
                     this.$nextTick(() => { if(this.$refs.quickPriceInput) this.$refs.quickPriceInput.focus(); });
                 }
             },
-            
+
             getNextName() {
                 let max = 0; const regex = /^未命名(\d+)$/;
-                this.products.forEach(p => { const match = p.name.match(regex); if (match) { const num = parseInt(match[1]); if (num > max) max = num; } });
+                this.products.forEach(p => { const match = (p.name || '').match(regex); if (match) { const num = parseInt(match[1]); if (num > max) max = num; } });
                 return `未命名${max + 1}`;
             },
 
             saveQuickAdd() {
                 if (!this.quickAddForm.price) return alert('请输入价格');
-                
                 const finalName = this.getNextName();
                 const priceVal = parseFloat(this.quickAddForm.price);
-                
                 const retail = this.priceMode === 'retail' ? priceVal : 0;
                 const wholesale = this.priceMode === 'wholesale' ? priceVal : 0;
-
                 const p = { barcode: this.quickAddForm.barcode, name: finalName, category: '默认', wholesale_price: wholesale, retail_price: retail, status: 'active' };
                 const tempId = crypto.randomUUID(); const newProduct = { ...p, id: tempId };
-                
                 this.products.unshift(newProduct); localStorage.setItem('products', JSON.stringify(this.products)); this.addToSyncQueue('products', 'insert', p);
-                
-                this.recentProducts.unshift(p);
-                if (this.recentProducts.length > 10) this.recentProducts.pop();
+
+                this.recentProducts.unshift(p); if (this.recentProducts.length > 10) this.recentProducts.pop(); localStorage.setItem('recentProducts', JSON.stringify(this.recentProducts));
 
                 this.cart.push({ product_id: tempId, name: p.name, barcode: p.barcode, unit_price: priceVal, quantity: 1 });
                 this.showQuickAdd = false; this.cashierSearch = '';
             },
-            
-            handleBarcodeEnter() { if (!this.entryForm.barcode) return; const exists = this.products.find(p => p.barcode === this.entryForm.barcode); if (exists) alert('条码已存在: ' + exists.name); },
-            
+
+            handleBarcodeEnter() {
+                if (!this.entryForm.barcode) return;
+                const exists = this.products.find(p => p.barcode === this.entryForm.barcode);
+                if (exists) alert('条码已存在: ' + exists.name);
+                else {
+                    // 当用户在条码输入后按回车，弹出 entry modal 以填入其余信息
+                    this.entryModalVisible = true;
+                    this.$nextTick(()=> {
+                        const el = document.querySelector('.modal-panel input');
+                        if (el) el.focus();
+                    });
+                }
+            },
+
             saveProduct() {
                 if (!this.entryForm.barcode) return alert('需输入条码');
                 let finalName = this.entryForm.name || this.getNextName();
-                
                 const p = { barcode: this.entryForm.barcode, name: finalName, category: this.entryForm.category || '默认', wholesale_price: parseFloat(this.entryForm.wholesale_price) || 0, retail_price: parseFloat(this.entryForm.retail_price) || 0, status: 'active' };
                 const tempId = crypto.randomUUID(); this.products.unshift({ ...p, id: tempId }); localStorage.setItem('products', JSON.stringify(this.products)); this.addToSyncQueue('products', 'insert', p);
-                
-                this.recentProducts.unshift(p);
-                if (this.recentProducts.length > 10) this.recentProducts.pop();
 
-                this.entryForm = { barcode: '', name: '', category: '', wholesale_price: '', retail_price: '' }; 
-                
+                this.recentProducts.unshift(p); if (this.recentProducts.length > 10) this.recentProducts.pop(); localStorage.setItem('recentProducts', JSON.stringify(this.recentProducts));
+
+                this.entryForm = { barcode: '', name: '', category: '', wholesale_price: '', retail_price: '' };
                 if (!this.isMobile) this.$refs.barcodeInput.focus();
             },
-            
+
+            /* Entry modal confirm (扫码后弹窗保存并入库) */
+            confirmEntryAdd() {
+                if (!this.entryForm.barcode) return alert('缺少条码');
+                this.saveProduct();
+                this.entryModalVisible = false;
+            },
+            cancelEntryAdd() {
+                this.entryModalVisible = false;
+            },
+
             removeFromCart(idx) { this.cart.splice(idx, 1); },
             clearCart() { if(confirm('清空购物车?')) this.cart = []; },
-            
+
             checkoutDirectly() {
-                const total = this.cartTotalPrice; if (!confirm(`总金额：R$ ${total}\n\n确认收款？`)) return;
+                const total = this.cartTotalPrice;
+                if (!confirm(`总金额：R$ ${total}\n\n确认收款？`)) return;
                 const orderId = crypto.randomUUID(); const now = new Date().toISOString();
                 const order = { id: orderId, total_price: parseFloat(total), total_quantity: this.cartTotalQty, price_type: this.priceMode, payment_method: '常规结算', status: 'completed', created_at: now };
                 const items = this.cart.map(i => ({ order_id: orderId, product_id: i.product_id, product_name: i.name, barcode: i.barcode, unit_price: i.unit_price, quantity: i.quantity, subtotal: i.unit_price * i.quantity }));
-                
-                this.orders.unshift(order); this.orderItems.push(...items); 
+                this.orders.unshift(order); this.orderItems.push(...items);
                 localStorage.setItem('orders', JSON.stringify(this.orders)); localStorage.setItem('orderItems', JSON.stringify(this.orderItems));
                 this.addToSyncQueue('orders', 'insert', order); this.addToSyncQueue('order_items', 'insert', items);
-                
-                this.cart = []; 
+                this.cart = [];
                 this.switchTab('orders');
             },
-            
+
             voidOrder(order) { if(!confirm('确认作废?')) return; order.status = 'void'; localStorage.setItem('orders', JSON.stringify(this.orders)); this.addToSyncQueue('orders', 'update', { id: order.id, status: 'void' }); },
             async deleteOrder(order) {
                 if(!confirm('确定要永久删除这条作废订单吗？此操作不可恢复。')) return;
@@ -630,11 +811,13 @@
             },
             viewOrderDetails(order) { this.viewingOrder = order; },
             editProduct(p) { this.editingProduct = JSON.parse(JSON.stringify(p)); },
+
             async updateProduct() {
                 const idx = this.products.findIndex(p => p.id === this.editingProduct.id); if (idx !== -1) this.products[idx] = this.editingProduct;
                 localStorage.setItem('products', JSON.stringify(this.products));
                 const { id, ...updates } = this.editingProduct; this.addToSyncQueue('products', 'update', { id, ...updates }); this.editingProduct = null;
             },
+
             async deleteProduct() {
                 if(!confirm('⚠️ 警告：确定要删除此商品吗？')) return;
                 const idToDelete = this.editingProduct.id;
@@ -647,21 +830,42 @@
                         alert('💡 提示：该商品存在关联订单，无法彻底删除。\n已为您自动转为【暂停销售】状态。');
                     } else {
                         this.products = this.products.filter(p => p.id !== idToDelete); localStorage.setItem('products', JSON.stringify(this.products));
-                        console.log('商品删除成功'); 
+                        console.log('商品删除成功');
                     }
                 } else { alert('离线模式无法删除'); }
                 this.editingProduct = null;
             },
+
             exportExcel() { const ws = XLSX.utils.json_to_sheet(this.products); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Products"); XLSX.writeFile(wb, "Products_Brazil.xlsx"); },
             importExcel(e) { const f = e.target.files[0]; const r = new FileReader(); r.onload = (evt) => { const wb = XLSX.read(evt.target.result, { type: 'binary' }); const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]); if(confirm(`导入 ${data.length} 条?`)) { data.forEach(row => { const p = { barcode: row['barcode']||row['条码'], name: row['name']||row['名称'], category: row['category']||'默认', wholesale_price: row['wholesale']||0, retail_price: row['retail']||0, status: 'active' }; if(p.barcode) this.addToSyncQueue('products', 'insert', p); }); alert('已加入队列'); } }; r.readAsBinaryString(f); },
+
             formatDate(str) { if(!str) return ''; return new Date(str).toLocaleString('zh-CN', { timeZone: 'America/Sao_Paulo', month:'numeric', day:'numeric', hour:'numeric', minute:'numeric', hour12: false }); },
-            addToSyncQueue(table, action, data) { this.syncQueue.push({ table, action, data, retry: 0 }); localStorage.setItem('syncQueue', JSON.stringify(this.syncQueue)); this.processSyncQueue(); },
+
+            /* ===== Sync 队列简易实现 ===== */
+            addToSyncQueue(table, action, data) {
+                this.syncQueue.push({ table, action, data, retry: 0, time: Date.now() });
+                localStorage.setItem('syncQueue', JSON.stringify(this.syncQueue));
+                this.processSyncQueue();
+            },
+
             async processSyncQueue() {
-                if (!this.isOnline || !this.syncQueue.length) return; const item = this.syncQueue[0];
-                try { if (item.action === 'insert') await this.supabase.from(item.table).insert(item.data); else if (item.action === 'update') { const { id, ...updates } = item.data; await this.supabase.from(item.table).update(updates).eq('id', id); } this.syncQueue.shift(); localStorage.setItem('syncQueue', JSON.stringify(this.syncQueue)); this.processSyncQueue(); } catch (e) { item.retry++; if(item.retry > 3) this.syncQueue.shift(); localStorage.setItem('syncQueue', JSON.stringify(this.syncQueue)); }
+                if (!this.isOnline || !this.syncQueue.length) return;
+                const item = this.syncQueue[0];
+                try {
+                    if (item.action === 'insert') await this.supabase.from(item.table).insert(item.data);
+                    else if (item.action === 'update') { const { id, ...updates } = item.data; await this.supabase.from(item.table).update(updates).eq('id', id); }
+                    this.syncQueue.shift(); localStorage.setItem('syncQueue', JSON.stringify(this.syncQueue));
+                    // 继续递归处理
+                    setTimeout(() => this.processSyncQueue(), 200);
+                } catch (e) {
+                    item.retry = (item.retry || 0) + 1;
+                    if (item.retry > 3) this.syncQueue.shift();
+                    localStorage.setItem('syncQueue', JSON.stringify(this.syncQueue));
+                }
             }
         }
     });
+
     app.mount('#app');
 </script>
 </body>
