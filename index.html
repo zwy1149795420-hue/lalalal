@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>极简收银 Pro (巴西版)</title>
+    <title>极简收银 Pro </title>
     
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -166,33 +166,57 @@
             </div>
 
             <div v-if="currentTab === 'manage'" class="space-y-4 max-w-7xl mx-auto">
-                <div class="flex flex-wrap gap-2 bg-white p-2 rounded-xl shadow-sm border border-slate-100 sticky top-0 z-10 items-center">
-                    <div class="relative flex-1 min-w-[150px]">
+                <div class="flex gap-2 bg-white p-2 rounded-xl shadow-sm border border-slate-100 items-center">
+                    <div class="relative flex-1">
                         <i class="ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                        <input v-model="searchText" type="text" placeholder="搜索商品..." class="w-full pl-9 p-3 bg-slate-50 rounded-lg text-sm border-none focus:ring-2 focus:ring-blue-100">
+                        <input v-model="searchText" type="text" placeholder="扫码或输入名称搜索..." class="w-full pl-9 p-3 bg-slate-50 rounded-lg text-sm border-none focus:ring-2 focus:ring-blue-100 font-bold">
                     </div>
-                    
-                    <select v-model="productFilterStatus" class="p-3 bg-slate-50 rounded-lg text-sm font-bold border-none text-slate-700 focus:ring-2 focus:ring-blue-100">
+                    <button @click="toggleScanner('manage')" :class="scanning ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-600'" class="p-3 rounded-lg flex items-center gap-2 font-bold btn-press">
+                        <i class="ph-qr-code text-xl"></i>
+                        <span class="hidden md:inline">{{ scanning ? '关闭摄像头' : '扫码搜索' }}</span>
+                    </button>
+                </div>
+                
+                <div v-if="scanning && currentTab === 'manage'" class="h-[250px] bg-black rounded-xl overflow-hidden relative">
+                    <div id="manage-reader" class="w-full h-full"></div>
+                    <div class="absolute inset-0 border-[4px] border-blue-500/30 pointer-events-none"></div>
+                    <button @click="stopScanner" class="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white/90 px-4 py-2 rounded-full text-xs font-bold">关闭</button>
+                </div>
+
+                <div class="flex flex-wrap gap-2 items-center">
+                    <select v-model="productFilterStatus" class="p-2.5 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 shadow-sm flex-1 md:flex-none">
+                        <option value="all">🟢 ⚪ 全部状态</option>
                         <option value="active">🟢 正常销售</option>
                         <option value="disabled">⚪ 已暂停</option>
-                        <option value="all">📁 全部商品</option>
                     </select>
 
-                    <button @click="exportExcel" class="p-3 bg-green-50 text-green-700 rounded-lg"><i class="ph-file-xls text-xl"></i></button>
-                    <label class="p-3 bg-blue-50 text-blue-700 rounded-lg flex items-center cursor-pointer">
-                        <i class="ph-upload-simple text-xl"></i>
-                        <input type="file" @change="importExcel" class="hidden" accept=".xlsx,.xls">
-                    </label>
+                    <select v-model="productFilterCategory" class="p-2.5 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 shadow-sm flex-1 md:flex-none">
+                        <option value="all">📁 全部分类</option>
+                        <option v-for="cat in allCategories" :key="cat" :value="cat">{{ cat }}</option>
+                    </select>
+
+                    <div class="flex gap-2 ml-auto">
+                        <button @click="exportExcel" class="p-2.5 bg-green-50 text-green-700 rounded-lg font-bold text-sm shadow-sm border border-green-100 flex items-center gap-1 btn-press">
+                            <i class="ph-file-xls text-lg"></i> 导出
+                        </button>
+                        <label class="p-2.5 bg-blue-50 text-blue-700 rounded-lg font-bold text-sm shadow-sm border border-blue-100 flex items-center gap-1 cursor-pointer btn-press">
+                            <i class="ph-upload-simple text-lg"></i> 导入
+                            <input type="file" @change="importExcel" class="hidden" accept=".xlsx,.xls">
+                        </label>
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                    <div v-for="p in filteredProducts" :key="p.id" @click="editProduct(p)" class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 active:scale-98 transition-transform cursor-pointer relative overflow-hidden hover:border-blue-300">
+                    <div v-for="p in filteredProducts" :key="p.id" @click="editProduct(p)" class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 active:scale-98 transition-transform cursor-pointer relative overflow-hidden hover:border-blue-300 group">
                         <div v-if="p.status==='disabled'" class="absolute right-0 top-0 bg-red-100 text-red-600 text-[10px] px-2 py-1 rounded-bl-lg font-bold">已暂停</div>
-                        <h3 :class="p.status==='disabled' ? 'text-slate-400' : 'text-slate-800'" class="font-bold truncate mb-1">{{ p.name }}</h3>
+                        <div v-else class="absolute right-0 top-0 bg-blue-50 text-blue-600 text-[10px] px-2 py-1 rounded-bl-lg font-bold">{{ p.category || '默认' }}</div>
+
+                        <h3 :class="p.status==='disabled' ? 'text-slate-400' : 'text-slate-800'" class="font-bold truncate mb-1 text-lg">{{ p.name }}</h3>
                         <p class="text-xs text-slate-400 font-mono mb-3">{{ p.barcode }}</p>
-                        <div class="flex justify-between items-end border-t border-slate-50 pt-2">
-                            <span class="text-xs text-slate-400">进: {{ p.wholesale_price }}</span>
-                            <span class="text-lg font-bold text-blue-600">{{ p.retail_price }}</span>
+                        
+                        <div class="flex justify-between items-end border-t border-slate-50 pt-2 text-sm">
+                            <div class="text-slate-500">批: <span class="font-bold">{{ p.wholesale_price }}</span></div>
+                            <div class="text-blue-600">零: <span class="font-bold text-lg">{{ p.retail_price }}</span></div>
                         </div>
                     </div>
                 </div>
@@ -230,6 +254,15 @@
                             <label class="text-xs font-bold text-slate-400 block mb-1">名称</label>
                             <input v-model="entryForm.name" type="text" class="w-full p-3 bg-slate-50 rounded-xl border-none focus:ring-2 focus:ring-blue-100" placeholder="自动生成未命名">
                         </div>
+                        
+                        <div>
+                            <label class="text-xs font-bold text-slate-400 block mb-1">分类 (可直接输入新分类)</label>
+                            <input list="category-list" v-model="entryForm.category" type="text" class="w-full p-3 bg-slate-50 rounded-xl border-none focus:ring-2 focus:ring-blue-100 font-bold" placeholder="例如: 饮料">
+                            <datalist id="category-list">
+                                <option v-for="cat in allCategories" :value="cat"></option>
+                            </datalist>
+                        </div>
+
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label class="text-xs font-bold text-slate-400 block mb-1">批发价</label>
@@ -255,7 +288,7 @@
                 
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                     <div class="p-3 border-b border-slate-100 font-bold text-sm text-slate-700 bg-slate-50 flex items-center justify-between">
-                        <span>🏆 商品销量排行</span>
+                        <span>🏆 商品销量排行 (实时)</span>
                         <div class="flex bg-slate-200 rounded-lg p-0.5">
                             <button @click="rankingRange = 'today'" :class="rankingRange==='today' ? 'bg-white shadow text-blue-600' : 'text-slate-500'" class="px-3 py-1 text-xs rounded-md font-bold transition-all">今日</button>
                             <button @click="rankingRange = 'week'" :class="rankingRange==='week' ? 'bg-white shadow text-blue-600' : 'text-slate-500'" class="px-3 py-1 text-xs rounded-md font-bold transition-all">本周</button>
@@ -329,6 +362,12 @@
             <div class="space-y-3">
                 <div><label class="text-xs font-bold text-slate-400">条码</label><input v-model="editingProduct.barcode" class="w-full p-3 border border-slate-200 rounded-lg bg-yellow-50 font-mono text-slate-700"></div>
                 <div><label class="text-xs font-bold text-slate-400">名称</label><input v-model="editingProduct.name" class="w-full p-3 border border-slate-200 rounded-lg"></div>
+                
+                <div>
+                    <label class="text-xs font-bold text-slate-400">分类 (可直接修改)</label>
+                    <input list="category-list" v-model="editingProduct.category" type="text" class="w-full p-3 border border-slate-200 rounded-lg font-bold">
+                </div>
+
                 <div class="flex gap-3">
                     <div class="flex-1"><label class="text-xs font-bold text-slate-400">批发价</label><input v-model="editingProduct.wholesale_price" type="number" class="w-full p-3 border border-slate-200 rounded-lg font-bold"></div>
                     <div class="flex-1"><label class="text-xs font-bold text-slate-400">零售价</label><input v-model="editingProduct.retail_price" type="number" class="w-full p-3 border border-slate-200 rounded-lg font-bold text-blue-600"></div>
@@ -382,6 +421,30 @@
         </div>
     </div>
 
+    <div v-if="showQuickAdd" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-2xl p-5 shadow-2xl animate-fade-in-up">
+            <h3 class="font-bold text-lg mb-2 text-slate-800 flex items-center gap-2">
+                <i class="ph-plus-circle text-orange-500"></i> 商品未录入，立即添加？
+            </h3>
+            <p class="text-xs text-slate-400 mb-4">保存后将自动加入购物车</p>
+            
+            <div class="space-y-3">
+                <div><label class="text-xs font-bold text-slate-400">条码</label><input v-model="quickAddForm.barcode" class="w-full p-3 border border-slate-200 rounded-lg bg-slate-100 font-mono" readonly></div>
+                <div><label class="text-xs font-bold text-slate-400">名称</label><input v-model="quickAddForm.name" class="w-full p-3 border border-slate-200 rounded-lg" placeholder="商品名称"></div>
+                <div><label class="text-xs font-bold text-slate-400">分类</label><input list="category-list" v-model="quickAddForm.category" class="w-full p-3 border border-slate-200 rounded-lg" placeholder="选择或输入分类"></div>
+                <div class="flex gap-3">
+                    <div class="flex-1"><label class="text-xs font-bold text-slate-400">批发价</label><input v-model="quickAddForm.wholesale_price" type="number" class="w-full p-3 border border-slate-200 rounded-lg"></div>
+                    <div class="flex-1"><label class="text-xs font-bold text-slate-400">零售价</label><input v-model="quickAddForm.retail_price" type="number" class="w-full p-3 border border-slate-200 rounded-lg text-blue-600"></div>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-3 mt-6">
+                <button @click="showQuickAdd = false" class="py-3 bg-slate-100 text-slate-600 rounded-xl font-bold">取消</button>
+                <button @click="saveQuickAdd" class="py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg">保存并入库</button>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <script>
@@ -402,7 +465,9 @@
                 currentTab: 'cashier', 
                 products: [], orders: [], orderItems: [], 
                 
-                entryForm: { barcode: '', name: '', wholesale_price: '', retail_price: '' },
+                // 表单
+                entryForm: { barcode: '', name: '', category: '', wholesale_price: '', retail_price: '' },
+                quickAddForm: { barcode: '', name: '', category: '', wholesale_price: '', retail_price: '' },
                 
                 scanning: false,
                 html5QrCode: null,
@@ -411,15 +476,19 @@
                 scanCooldown: 2000,
                 justScanned: false,
                 
+                // 筛选与管理
                 searchText: '',
-                productFilterStatus: 'active', // 默认只看正常销售的
+                productFilterStatus: 'active',
+                productFilterCategory: 'all',
                 editingProduct: null,
+                showQuickAdd: false,
+                
                 priceMode: 'retail', 
                 cashierSearch: '',
                 cart: [],
                 
-                // 报表相关
-                rankingRange: 'today', // today, week, month
+                // 报表
+                rankingRange: 'today', 
                 viewingOrder: null,
                 
                 syncQueue: JSON.parse(localStorage.getItem('syncQueue') || '[]')
@@ -428,14 +497,20 @@
         computed: {
             currentTitle() { return { entry: '商品录入', manage: '商品管理', cashier: '前台收银', orders: '销售报表' }[this.currentTab]; },
             
-            // 商品筛选：增加状态分类逻辑
+            // 获取所有分类 (去重)
+            allCategories() {
+                const cats = new Set(this.products.map(p => p.category || '默认'));
+                return Array.from(cats).sort();
+            },
+
+            // 叠加筛选逻辑
             filteredProducts() {
                 let list = this.products;
-                // 1. 状态筛选
-                if (this.productFilterStatus !== 'all') {
-                    list = list.filter(p => p.status === this.productFilterStatus);
-                }
-                // 2. 文本搜索
+                // 1. 状态
+                if (this.productFilterStatus !== 'all') list = list.filter(p => p.status === this.productFilterStatus);
+                // 2. 分类
+                if (this.productFilterCategory !== 'all') list = list.filter(p => (p.category || '默认') === this.productFilterCategory);
+                // 3. 搜索
                 if (this.searchText) {
                     const low = this.searchText.toLowerCase();
                     list = list.filter(p => p.name?.toLowerCase().includes(low) || p.barcode.includes(low));
@@ -447,56 +522,31 @@
             cartTotalQty() { return this.cart.reduce((sum, item) => sum + item.quantity, 0); },
             sortedOrders() { return [...this.orders].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); },
             
-            // 订单详情子项
             viewingOrderItems() {
                 if (!this.viewingOrder) return [];
                 return this.orderItems.filter(i => i.order_id === this.viewingOrder.id);
             },
 
-            // 圣保罗今日销售额
             todaySales() {
                 const spDate = this.getSaoPauloDateString(new Date());
                 return this.orders.filter(o => o.status === 'completed' && this.formatDate(o.created_at).includes(spDate)).reduce((sum, o) => sum + o.total_price, 0);
             },
 
-            // 核心：多维度销量排行
             productSalesStats() {
-                // 1. 确定时间范围
                 const now = new Date();
                 let startTime;
-                
                 if (this.rankingRange === 'today') {
-                    // 今天的开始 (字符串匹配即可)
                     const spDate = this.getSaoPauloDateString(now);
-                    const validOrderIds = new Set(this.orders
-                        .filter(o => o.status === 'completed' && this.formatDate(o.created_at).includes(spDate))
-                        .map(o => o.id));
+                    const validOrderIds = new Set(this.orders.filter(o => o.status === 'completed' && this.formatDate(o.created_at).includes(spDate)).map(o => o.id));
                     return this.calcStats(validOrderIds);
-                } 
-                else {
-                    // 周和月需要日期比较
+                } else {
                     const spNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
                     if (this.rankingRange === 'week') {
-                        // 获取本周一
-                        const day = spNow.getDay() || 7; // Sunday is 0, make it 7
-                        spNow.setHours(0,0,0,0);
-                        spNow.setDate(spNow.getDate() - day + 1);
-                        startTime = spNow;
+                        const day = spNow.getDay() || 7; spNow.setHours(0,0,0,0); spNow.setDate(spNow.getDate() - day + 1); startTime = spNow;
                     } else if (this.rankingRange === 'month') {
-                        // 获取本月1号
-                        spNow.setDate(1);
-                        spNow.setHours(0,0,0,0);
-                        startTime = spNow;
+                        spNow.setDate(1); spNow.setHours(0,0,0,0); startTime = spNow;
                     }
-                    
-                    const validOrderIds = new Set(this.orders
-                        .filter(o => {
-                            if (o.status !== 'completed') return false;
-                            const oDate = new Date(o.created_at); // UTC
-                            // 简单比较时间戳 (略有误差但在接受范围内，或者可以全部转SP时间比较)
-                            return oDate >= startTime; 
-                        })
-                        .map(o => o.id));
+                    const validOrderIds = new Set(this.orders.filter(o => o.status === 'completed' && new Date(o.created_at) >= startTime).map(o => o.id));
                     return this.calcStats(validOrderIds);
                 }
             }
@@ -510,67 +560,33 @@
             setInterval(this.processSyncQueue, 10000);
         },
         methods: {
-            playBeep() {
-                const audio = new Audio("data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU");
-                const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.type = "sine";
-                osc.frequency.value = 1200;
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                osc.start();
-                gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.1);
-                setTimeout(() => osc.stop(), 100);
-            },
-
-            // 统计辅助函数
-            calcStats(validOrderIds) {
+            playBeep() { const a = new Audio("data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU"); a.play().catch(()=>{}); },
+            calcStats(ids) {
                 const stats = {};
                 this.orderItems.forEach(item => {
-                    if (validOrderIds.has(item.order_id)) {
-                        if (!stats[item.barcode]) {
-                            stats[item.barcode] = { name: item.product_name, barcode: item.barcode, qty: 0 };
-                        }
+                    if (ids.has(item.order_id)) {
+                        if (!stats[item.barcode]) stats[item.barcode] = { name: item.product_name, barcode: item.barcode, qty: 0 };
                         stats[item.barcode].qty += item.quantity;
                     }
                 });
                 return Object.values(stats).sort((a, b) => b.qty - a.qty);
             },
-            
-            // 圣保罗日期字符串辅助
-            getSaoPauloDateString(date) {
-                return date.toLocaleDateString('zh-CN', { timeZone: 'America/Sao_Paulo' }).split('/').join('-');
-            },
+            getSaoPauloDateString(date) { return date.toLocaleDateString('zh-CN', { timeZone: 'America/Sao_Paulo' }).split('/').join('-'); },
 
-            async toggleScanner(tab) {
-                if (this.scanning) { await this.stopScanner(); } else { this.startScanner(tab); }
-            },
+            async toggleScanner(tab) { if (this.scanning) { await this.stopScanner(); } else { this.startScanner(tab); } },
             async startScanner(tab) {
                 this.scanError = '';
-                const elementId = tab === 'entry' ? "reader" : "cashier-reader";
+                const elementId = tab === 'entry' ? "reader" : (tab === 'manage' ? 'manage-reader' : "cashier-reader");
                 if (!this.html5QrCode) { this.html5QrCode = new Html5Qrcode(elementId); }
                 try {
                     this.scanning = true;
-                    await this.html5QrCode.start(
-                        { facingMode: "environment" }, 
-                        { fps: 10, qrbox: { width: 250, height: 250 } },
-                        (decodedText) => this.onScanSuccess(decodedText, tab),
-                        (errorMessage) => {}
-                    );
-                } catch (err) {
-                    this.scanning = false;
-                    this.scanError = "摄像头启动失败";
-                    this.html5QrCode = null;
-                }
+                    await this.html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } },
+                        (decodedText) => this.onScanSuccess(decodedText, tab), (errorMessage) => {});
+                } catch (err) { this.scanning = false; this.scanError = "摄像头启动失败"; this.html5QrCode = null; }
             },
             async stopScanner() {
-                if (this.html5QrCode && this.html5QrCode.isScanning) {
-                    try { await this.html5QrCode.stop(); this.html5QrCode.clear(); } catch (e) {}
-                }
-                this.html5QrCode = null;
-                this.scanning = false;
-                this.justScanned = false;
+                if (this.html5QrCode && this.html5QrCode.isScanning) { try { await this.html5QrCode.stop(); this.html5QrCode.clear(); } catch (e) {} }
+                this.html5QrCode = null; this.scanning = false; this.justScanned = false;
             },
             onScanSuccess(decodedText, tab) {
                 const now = Date.now();
@@ -580,18 +596,11 @@
                 this.justScanned = true;
                 setTimeout(() => { this.justScanned = false; }, this.scanCooldown);
 
-                if (tab === 'entry') {
-                    this.entryForm.barcode = decodedText;
-                    this.handleBarcodeEnter();
-                } else if (tab === 'cashier') {
-                    this.cashierSearch = decodedText;
-                    this.addToCartByInput();
-                }
+                if (tab === 'entry') { this.entryForm.barcode = decodedText; this.handleBarcodeEnter(); } 
+                else if (tab === 'cashier') { this.cashierSearch = decodedText; this.addToCartByInput(); }
+                else if (tab === 'manage') { this.searchText = decodedText; }
             },
-            async switchTab(tab) {
-                if (this.scanning) await this.stopScanner();
-                this.currentTab = tab;
-            },
+            async switchTab(tab) { if (this.scanning) await this.stopScanner(); this.currentTab = tab; },
 
             loadLocalData() {
                 this.products = JSON.parse(localStorage.getItem('products') || '[]');
@@ -602,13 +611,68 @@
                 if (!this.isOnline) return;
                 const { data: p } = await this.supabase.from('products').select('*');
                 if (p) { this.products = p; localStorage.setItem('products', JSON.stringify(p)); }
-                
                 const { data: o } = await this.supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(100);
                 if (o) { this.orders = o; localStorage.setItem('orders', JSON.stringify(o)); }
-
                 const { data: oi } = await this.supabase.from('order_items').select('*').limit(1000);
                 if (oi) { this.orderItems = oi; localStorage.setItem('orderItems', JSON.stringify(oi)); }
             },
+            
+            // 收银与补录逻辑
+            addToCartByInput() {
+                const term = this.cashierSearch.trim();
+                if (!term) return;
+                let p = this.products.find(x => x.barcode === term && x.status === 'active');
+                if (!p) p = this.products.find(x => x.name === term && x.status === 'active');
+                
+                if (p) {
+                    const existing = this.cart.find(i => i.product_id === p.id);
+                    if (existing) existing.quantity++;
+                    else this.cart.push({
+                        product_id: p.id, name: p.name, barcode: p.barcode,
+                        unit_price: this.priceMode === 'retail' ? p.retail_price : p.wholesale_price, quantity: 1
+                    });
+                    this.cashierSearch = '';
+                } else {
+                    // 缺货，触发补录
+                    if(confirm(`商品未找到: ${term}\n\n是否立即录入？`)) {
+                        this.quickAddForm = { barcode: term, name: '', category: '', wholesale_price: '', retail_price: '' };
+                        this.showQuickAdd = true;
+                    } else {
+                        this.cashierSearch = '';
+                    }
+                }
+            },
+            
+            saveQuickAdd() {
+                if (!this.quickAddForm.name || !this.quickAddForm.retail_price) return alert('请填写名称和零售价');
+                let finalName = this.quickAddForm.name;
+                const p = {
+                    barcode: this.quickAddForm.barcode,
+                    name: finalName,
+                    category: this.quickAddForm.category || '默认',
+                    wholesale_price: parseFloat(this.quickAddForm.wholesale_price) || 0,
+                    retail_price: parseFloat(this.quickAddForm.retail_price) || 0,
+                    status: 'active'
+                };
+                
+                // 1. 保存商品
+                const tempId = crypto.randomUUID();
+                const newProduct = { ...p, id: tempId };
+                this.products.unshift(newProduct);
+                localStorage.setItem('products', JSON.stringify(this.products));
+                this.addToSyncQueue('products', 'insert', p);
+                
+                // 2. 自动加购物车
+                this.cart.push({
+                    product_id: tempId, name: p.name, barcode: p.barcode,
+                    unit_price: this.priceMode === 'retail' ? p.retail_price : p.wholesale_price, quantity: 1
+                });
+                
+                this.showQuickAdd = false;
+                this.cashierSearch = '';
+            },
+
+            // 普通录入
             handleBarcodeEnter() {
                 if (!this.entryForm.barcode) return;
                 const exists = this.products.find(p => p.barcode === this.entryForm.barcode);
@@ -620,6 +684,7 @@
                 const p = {
                     barcode: this.entryForm.barcode,
                     name: finalName,
+                    category: this.entryForm.category || '默认',
                     wholesale_price: parseFloat(this.entryForm.wholesale_price) || 0,
                     retail_price: parseFloat(this.entryForm.retail_price) || 0,
                     status: 'active'
@@ -628,24 +693,10 @@
                 this.products.unshift({ ...p, id: tempId });
                 localStorage.setItem('products', JSON.stringify(this.products));
                 this.addToSyncQueue('products', 'insert', p);
-                this.entryForm = { barcode: '', name: '', wholesale_price: '', retail_price: '' };
+                this.entryForm = { barcode: '', name: '', category: '', wholesale_price: '', retail_price: '' };
                 this.$refs.barcodeInput.focus();
             },
-            addToCartByInput() {
-                const term = this.cashierSearch.trim();
-                if (!term) return;
-                let p = this.products.find(x => x.barcode === term && x.status === 'active');
-                if (!p) p = this.products.find(x => x.name === term && x.status === 'active');
-                if (p) {
-                    const existing = this.cart.find(i => i.product_id === p.id);
-                    if (existing) existing.quantity++;
-                    else this.cart.push({
-                        product_id: p.id, name: p.name, barcode: p.barcode,
-                        unit_price: this.priceMode === 'retail' ? p.retail_price : p.wholesale_price, quantity: 1
-                    });
-                    this.cashierSearch = '';
-                }
-            },
+
             removeFromCart(idx) { this.cart.splice(idx, 1); },
             clearCart() { if(confirm('清空购物车?')) this.cart = []; },
             checkoutDirectly() {
@@ -653,24 +704,12 @@
                 if (!confirm(`总金额：R$ ${total}\n\n确认收款？`)) return;
                 const orderId = crypto.randomUUID();
                 const now = new Date().toISOString();
-                const order = {
-                    id: orderId, total_price: parseFloat(total), total_quantity: this.cartTotalQty,
-                    price_type: this.priceMode, payment_method: '常规结算', status: 'completed', created_at: now
-                };
-                const items = this.cart.map(i => ({
-                    order_id: orderId, product_id: i.product_id, product_name: i.name, barcode: i.barcode,
-                    unit_price: i.unit_price, quantity: i.quantity, subtotal: i.unit_price * i.quantity
-                }));
-                this.orders.unshift(order);
-                this.orderItems.push(...items); 
-                
-                localStorage.setItem('orders', JSON.stringify(this.orders));
-                localStorage.setItem('orderItems', JSON.stringify(this.orderItems));
-                
-                this.addToSyncQueue('orders', 'insert', order);
-                this.addToSyncQueue('order_items', 'insert', items);
-                this.cart = [];
-                this.switchTab('orders');
+                const order = { id: orderId, total_price: parseFloat(total), total_quantity: this.cartTotalQty, price_type: this.priceMode, payment_method: '常规结算', status: 'completed', created_at: now };
+                const items = this.cart.map(i => ({ order_id: orderId, product_id: i.product_id, product_name: i.name, barcode: i.barcode, unit_price: i.unit_price, quantity: i.quantity, subtotal: i.unit_price * i.quantity }));
+                this.orders.unshift(order); this.orderItems.push(...items); 
+                localStorage.setItem('orders', JSON.stringify(this.orders)); localStorage.setItem('orderItems', JSON.stringify(this.orderItems));
+                this.addToSyncQueue('orders', 'insert', order); this.addToSyncQueue('order_items', 'insert', items);
+                this.cart = []; this.switchTab('orders');
             },
             voidOrder(order) {
                 if(!confirm('确认作废?')) return;
@@ -678,12 +717,7 @@
                 localStorage.setItem('orders', JSON.stringify(this.orders));
                 this.addToSyncQueue('orders', 'update', { id: order.id, status: 'void' });
             },
-            
-            // 订单详情弹窗
-            viewOrderDetails(order) {
-                this.viewingOrder = order;
-            },
-
+            viewOrderDetails(order) { this.viewingOrder = order; },
             editProduct(p) { this.editingProduct = JSON.parse(JSON.stringify(p)); },
             async updateProduct() {
                 const idx = this.products.findIndex(p => p.id === this.editingProduct.id);
@@ -700,11 +734,10 @@
                 localStorage.setItem('products', JSON.stringify(this.products));
                 if (this.isOnline) {
                     const { error } = await this.supabase.from('products').delete().eq('id', idToDelete);
-                    if (error) { alert('删除失败：该商品可能已有订单关联。'); this.fetchData(); }
-                } else { alert('离线模式无法彻底删除，请联网后操作。'); }
+                    if (error) { alert('删除失败：可能已有订单关联'); this.fetchData(); }
+                } else { alert('离线无法删除'); }
                 this.editingProduct = null;
             },
-
             exportExcel() {
                 const ws = XLSX.utils.json_to_sheet(this.products);
                 const wb = XLSX.utils.book_new();
@@ -719,7 +752,7 @@
                     const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
                     if(confirm(`导入 ${data.length} 条?`)) {
                         data.forEach(row => {
-                            const p = { barcode: row['barcode']||row['条码'], name: row['name']||row['名称'], wholesale_price: row['wholesale']||0, retail_price: row['retail']||0, status: 'active' };
+                            const p = { barcode: row['barcode']||row['条码'], name: row['name']||row['名称'], category: row['category']||'默认', wholesale_price: row['wholesale']||0, retail_price: row['retail']||0, status: 'active' };
                             if(p.barcode) this.addToSyncQueue('products', 'insert', p);
                         });
                         alert('已加入队列');
@@ -727,15 +760,7 @@
                 };
                 r.readAsBinaryString(f);
             },
-            
-            formatDate(str) { 
-                if(!str) return '';
-                return new Date(str).toLocaleString('zh-CN', {
-                    timeZone: 'America/Sao_Paulo', 
-                    month:'numeric', day:'numeric', hour:'numeric', minute:'numeric', hour12: false
-                }); 
-            },
-            
+            formatDate(str) { if(!str) return ''; return new Date(str).toLocaleString('zh-CN', { timeZone: 'America/Sao_Paulo', month:'numeric', day:'numeric', hour:'numeric', minute:'numeric', hour12: false }); },
             addToSyncQueue(table, action, data) {
                 this.syncQueue.push({ table, action, data, retry: 0 });
                 localStorage.setItem('syncQueue', JSON.stringify(this.syncQueue));
@@ -746,18 +771,9 @@
                 const item = this.syncQueue[0];
                 try {
                     if (item.action === 'insert') await this.supabase.from(item.table).insert(item.data);
-                    else if (item.action === 'update') {
-                        const { id, ...updates } = item.data;
-                        await this.supabase.from(item.table).update(updates).eq('id', id);
-                    }
-                    this.syncQueue.shift();
-                    localStorage.setItem('syncQueue', JSON.stringify(this.syncQueue));
-                    this.processSyncQueue();
-                } catch (e) {
-                    item.retry++;
-                    if(item.retry > 3) this.syncQueue.shift();
-                    localStorage.setItem('syncQueue', JSON.stringify(this.syncQueue));
-                }
+                    else if (item.action === 'update') { const { id, ...updates } = item.data; await this.supabase.from(item.table).update(updates).eq('id', id); }
+                    this.syncQueue.shift(); localStorage.setItem('syncQueue', JSON.stringify(this.syncQueue)); this.processSyncQueue();
+                } catch (e) { item.retry++; if(item.retry > 3) this.syncQueue.shift(); localStorage.setItem('syncQueue', JSON.stringify(this.syncQueue)); }
             }
         }
     });
