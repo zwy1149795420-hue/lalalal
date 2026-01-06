@@ -378,7 +378,28 @@
         </nav>
     </main>
 
-    <div v-if="showEntryModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div v-if="showQuickAdd" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-start pt-[20%] justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-fade-in-up">
+            <div class="text-center mb-6">
+                <h3 class="font-bold text-xl text-slate-800">商品未录入</h3>
+                <p class="text-xs text-slate-400 font-mono mt-1 bg-slate-100 inline-block px-2 rounded">{{ quickAddForm.barcode }}</p>
+            </div>
+            <div class="mb-6">
+                <label class="text-[10px] font-bold text-slate-400 uppercase block mb-2 text-center">
+                    输入{{ priceMode === 'retail' ? '零售' : '批发' }}单价
+                </label>
+                <div class="relative">
+                    <span class="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xl">R$</span>
+                    <input ref="quickPriceInput" v-model="quickAddForm.price" @focus="scrollToInput($event)" type="number" class="w-full p-4 pl-14 bg-slate-50 rounded-xl font-black text-3xl text-slate-800 text-center focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all outline-none" placeholder="0.00">
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <button @click="showQuickAdd = false" class="py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm">取消</button>
+                <button @click="saveQuickAdd" class="py-3 bg-slate-900 text-white rounded-xl font-bold text-sm shadow-lg btn-press">确认</button>
+            </div>
+        </div>
+    </div>
+
         <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-fade-in-up">
             <h3 class="font-bold text-lg mb-4 text-slate-800 flex items-center gap-2 border-b border-slate-50 pb-3">
                 <i class="ph-check-circle text-green-500 text-xl"></i> 扫码成功
@@ -448,6 +469,26 @@
     </div>
 
     <div v-if="showQuickAdd" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-start pt-[20%] justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-fade-in-up">
+            <div class="text-center mb-6">
+                <h3 class="font-bold text-xl text-slate-800">商品未录入</h3>
+                <p class="text-xs text-slate-400 font-mono mt-1 bg-slate-100 inline-block px-2 rounded">{{ quickAddForm.barcode }}</p>
+            </div>
+            <div class="mb-6">
+                <label class="text-[10px] font-bold text-slate-400 uppercase block mb-2 text-center">
+                    输入{{ priceMode === 'retail' ? '零售' : '批发' }}单价
+                </label>
+                <div class="relative">
+                    <span class="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xl">R$</span>
+                    <input ref="quickPriceInput" v-model="quickAddForm.price" @focus="scrollToInput($event)" type="number" class="w-full p-4 pl-14 bg-slate-50 rounded-xl font-black text-3xl text-slate-800 text-center focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all outline-none" placeholder="0.00">
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <button @click="showQuickAdd = false" class="py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm">取消</button>
+                <button @click="saveQuickAdd" class="py-3 bg-slate-900 text-white rounded-xl font-bold text-sm shadow-lg btn-press">确认</button>
+            </div>
+        </div>
+    </div>
         <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-fade-in-up">
             <div class="text-center mb-6">
                 <h3 class="font-bold text-xl text-slate-800">商品未录入</h3>
@@ -838,6 +879,7 @@
 </script>
 </body>
 </html>
+
 
 
 
