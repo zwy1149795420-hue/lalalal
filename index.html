@@ -3,351 +3,718 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>极简收银系统 (巴西加速版)</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.3.4/vue.global.prod.min.js"></script>
+    <title>极简商用收银系统</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.39.7/supabase.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+
     <style>
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        body { background-color: #f3f4f6; }
-        /* 防止页面未加载完成时显示乱码 */
-        [v-cloak] { display: none; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+        .scan-box { border: 2px solid #3b82f6; box-shadow: 0 0 0 100vmax rgba(0,0,0,0.5); content: ''; display: block; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 70%; height: 30%; z-index: 10; border-radius: 12px; }
+        .scan-anim { position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: #3b82f6; box-shadow: 0 0 4px #3b82f6; animation: scanning 2s infinite; }
+        @keyframes scanning { 0% {top:0} 50% {top:100%} 100% {top:0} }
+        /* 隐藏 input 但保持焦点用于扫码枪 */
+        .gun-input { position: absolute; opacity: 0; top: -1000px; }
     </style>
 </head>
-<body>
+<body class="bg-gray-100 h-screen flex flex-col overflow-hidden">
 
-<div id="app" v-cloak class="h-screen flex flex-col max-w-md mx-auto bg-white shadow-xl relative">
-    
-    <div class="bg-blue-600 text-white p-4 flex justify-between items-center z-10">
-        <h1 class="font-bold text-lg">{{ pageTitles[currentPage] }}</h1>
-        <div class="space-x-4">
-            <button @click="currentPage = 'entry'" :class="currentPage === 'entry' ? 'text-yellow-300' : 'text-blue-100'">录入</button>
-            <button @click="currentPage = 'cashier'" :class="currentPage === 'cashier' ? 'text-yellow-300' : 'text-blue-100'">收银</button>
-            <button @click="currentPage = 'list'" :class="currentPage === 'list' ? 'text-yellow-300' : 'text-blue-100'">管理</button>
+<div id="app" class="flex flex-col h-full">
+
+    <div class="bg-white p-3 shadow-sm z-20 flex justify-between items-center h-14 shrink-0">
+        <h1 class="font-bold text-lg text-gray-800">{{ currentTabName }}</h1>
+        <div class="text-xs px-2 py-1 rounded" :class="isOnline ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'">
+            {{ isOnline ? '已连接' : '离线模式' }}
         </div>
     </div>
 
-    <div class="flex-1 overflow-y-auto relative">
+    <div class="flex-1 overflow-y-auto overflow-x-hidden relative" id="main-content">
         
-        <div v-if="currentPage === 'entry'" class="p-4 space-y-4">
-            <div class="bg-gray-100 p-4 rounded-lg text-center">
-                <div v-show="showCamera" id="reader" class="w-full h-64 bg-black"></div>
-                <button @click="toggleCamera" class="mt-2 bg-blue-500 text-white px-4 py-2 rounded-full w-full">
-                    <i class="fas fa-camera"></i> {{ showCamera ? '关闭相机' : '打开相机扫码' }}
-                </button>
-                <p class="text-xs text-gray-500 mt-2">支持：手机相机 / 蓝牙扫码枪 / USB扫码枪</p>
-                <input ref="scannerInput" v-model="entryForm.barcode" @keyup.enter="handleEntryScan" placeholder="点击此处使用扫码枪" class="w-full mt-2 p-2 border rounded focus:bg-blue-50 outline-none">
+        <div v-if="currentTab === 'entry'" class="p-4 space-y-4 pb-24">
+            <div class="bg-black rounded-xl overflow-hidden relative h-64 flex items-center justify-center bg-gray-900 shadow-inner">
+                <div id="reader-entry" class="w-full h-full object-cover"></div>
+                <div v-if="!cameraActive" class="absolute inset-0 flex flex-col items-center justify-center text-white cursor-pointer" @click="startCamera('entry')">
+                    <i class="ri-qr-scan-2-line text-4xl mb-2"></i>
+                    <span>点击启动扫描 / 扫码枪直接扫</span>
+                </div>
+                <div v-if="cameraActive" class="scan-box"><div class="scan-anim"></div></div>
+                <div v-if="cameraActive" class="absolute bottom-2 text-white text-xs bg-black/50 px-2 py-1 rounded">点击画面停止</div>
             </div>
 
-            <div v-if="showEntryForm" class="bg-white p-4 border rounded-lg shadow-sm space-y-3">
-                <h3 class="font-bold text-gray-700">完善商品信息</h3>
+            <div class="bg-white p-4 rounded-xl shadow-sm space-y-4">
                 <div>
-                    <label class="text-xs text-gray-500">条形码</label>
-                    <input v-model="entryForm.barcode" class="w-full p-2 border rounded bg-gray-100" readonly>
-                </div>
-                <div>
-                    <label class="text-xs text-gray-500">商品名称</label>
-                    <input v-model="entryForm.name" placeholder="例如：可乐 330ml" class="w-full p-2 border rounded">
-                </div>
-                <div class="grid grid-cols-2 gap-2">
-                    <div>
-                        <label class="text-xs text-gray-500">批发价</label>
-                        <input type="number" v-model="entryForm.wholesale_price" class="w-full p-2 border rounded text-red-500">
-                    </div>
-                    <div>
-                        <label class="text-xs text-gray-500">零售价</label>
-                        <input type="number" v-model="entryForm.retail_price" class="w-full p-2 border rounded text-green-600">
+                    <label class="text-gray-500 text-xs font-bold">条形码 (必填)</label>
+                    <div class="flex gap-2">
+                        <input v-model="entryForm.barcode" type="text" class="w-full text-lg font-mono font-bold border-b-2 border-gray-200 focus:border-blue-500 outline-none py-2" placeholder="扫码或输入">
+                        <button @click="generateBarcode" class="text-blue-500 text-sm whitespace-nowrap">无码生成</button>
                     </div>
                 </div>
-                <div class="flex gap-2 pt-2">
-                    <button @click="cancelEntry" class="flex-1 py-3 bg-gray-200 rounded text-gray-600">取消</button>
-                    <button @click="saveProduct" class="flex-1 py-3 bg-blue-600 text-white rounded font-bold">保存商品</button>
+
+                <div>
+                    <label class="text-gray-500 text-xs font-bold">商品名称</label>
+                    <input v-model="entryForm.name" type="text" class="w-full text-lg border-b-2 border-gray-200 focus:border-blue-500 outline-none py-2" :placeholder="autoNamePlaceholder">
                 </div>
-            </div>
-            
-            <div v-if="entryMessage" class="p-3 bg-green-100 text-green-700 rounded text-center text-sm">
-                {{ entryMessage }}
+
+                <div class="flex gap-4">
+                    <div class="flex-1">
+                        <label class="text-gray-500 text-xs font-bold">批发价</label>
+                        <input v-model.number="entryForm.wholesale_price" type="number" step="0.01" class="w-full text-xl font-bold text-orange-600 border-b-2 border-gray-200 focus:border-orange-500 outline-none py-2" placeholder="0.00">
+                    </div>
+                    <div class="flex-1">
+                        <label class="text-gray-500 text-xs font-bold">零售价</label>
+                        <input v-model.number="entryForm.retail_price" type="number" step="0.01" class="w-full text-xl font-bold text-green-600 border-b-2 border-gray-200 focus:border-green-500 outline-none py-2" placeholder="0.00">
+                    </div>
+                </div>
+
+                <button @click="saveProduct" class="w-full bg-blue-600 active:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg mt-4 text-lg">
+                    保存并继续 (Enter)
+                </button>
             </div>
         </div>
 
-        <div v-if="currentPage === 'cashier'" class="flex flex-col h-full">
-            <div class="p-2 flex justify-center bg-gray-50 border-b">
-                <div class="flex bg-gray-200 rounded-lg p-1">
-                    <button @click="priceMode = 'wholesale'" :class="{'bg-white shadow': priceMode === 'wholesale'}" class="px-4 py-1 rounded-md text-sm transition">批发价</button>
-                    <button @click="priceMode = 'retail'" :class="{'bg-white shadow text-green-600': priceMode === 'retail'}" class="px-4 py-1 rounded-md text-sm transition">零售价</button>
-                </div>
+        <div v-if="currentTab === 'manage'" class="flex flex-col h-full">
+            <div class="p-3 bg-white border-b flex gap-2">
+                <input v-model="searchText" placeholder="搜索商品名或条码..." class="flex-1 bg-gray-100 px-3 py-2 rounded-lg outline-none">
+                <button @click="exportExcel" class="bg-green-100 text-green-700 px-3 py-2 rounded-lg text-sm font-bold"><i class="ri-file-excel-2-line"></i> 导出</button>
+                <label class="bg-blue-100 text-blue-700 px-3 py-2 rounded-lg text-sm font-bold cursor-pointer">
+                    <i class="ri-upload-2-line"></i> 导入
+                    <input type="file" @change="importExcel" class="hidden" accept=".xlsx,.xls">
+                </label>
             </div>
-
-            <div class="p-2">
-                 <input ref="cashierInput" v-model="cashierBarcode" @keyup.enter="handleCashierScan" placeholder="🔍 聚焦此处扫码" class="w-full p-3 border-2 border-blue-100 rounded-lg focus:border-blue-500 outline-none text-center text-lg">
-                 <button @click="toggleCamera" class="w-full mt-2 text-sm text-blue-500"><i class="fas fa-camera"></i> 手机相机扫码</button>
-                 <div v-show="showCamera" id="reader-cashier" class="w-full h-48 bg-black mt-2"></div>
-            </div>
-
-            <div class="flex-1 overflow-y-auto p-2 space-y-2">
-                <div v-for="(item, index) in cart" :key="index" class="bg-white p-3 rounded shadow-sm flex justify-between items-center">
-                    <div>
-                        <div class="font-bold">{{ item.name }}</div>
-                        <div class="text-xs text-gray-400">{{ item.barcode }}</div>
-                        <div class="text-sm">
-                            单价: <span :class="priceMode === 'retail' ? 'text-green-600' : 'text-red-500'">￥{{ priceMode === 'retail' ? item.retail_price : item.wholesale_price }}</span>
+            <div class="flex-1 overflow-y-auto p-2 space-y-2 pb-24">
+                <div v-for="p in filteredProducts" :key="p.id" class="bg-white p-3 rounded-lg shadow-sm flex justify-between items-center" :class="{'opacity-50': p.status === 'inactive'}">
+                    <div class="flex-1">
+                        <div class="font-bold text-gray-800">{{ p.name || '未命名' }}</div>
+                        <div class="text-xs text-gray-400 font-mono">{{ p.barcode }}</div>
+                        <div class="text-xs mt-1">
+                            <span class="text-orange-600 mr-2">批: ¥{{ p.wholesale_price }}</span>
+                            <span class="text-green-600">零: ¥{{ p.retail_price }}</span>
                         </div>
                     </div>
-                    <div class="flex items-center gap-3">
-                        <button @click="updateQty(index, -1)" class="w-8 h-8 bg-gray-100 rounded-full text-lg font-bold text-gray-600">-</button>
-                        <span class="font-bold w-6 text-center">{{ item.qty }}</span>
-                        <button @click="updateQty(index, 1)" class="w-8 h-8 bg-blue-100 rounded-full text-lg font-bold text-blue-600">+</button>
+                    <button @click="editProduct(p)" class="bg-gray-100 p-2 rounded-full text-gray-600">
+                        <i class="ri-edit-line"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="currentTab === 'cashier'" class="flex flex-col h-full relative">
+            <div v-if="cart.length === 0" class="p-2 grid grid-cols-2 gap-2 mb-2">
+                <button @click="cashierMode = 'retail'" :class="cashierMode === 'retail' ? 'bg-green-600 text-white ring-2 ring-green-300' : 'bg-white text-gray-600'" class="p-3 rounded-lg font-bold shadow-sm transition-all">
+                    零售模式
+                </button>
+                <button @click="cashierMode = 'wholesale'" :class="cashierMode === 'wholesale' ? 'bg-orange-600 text-white ring-2 ring-orange-300' : 'bg-white text-gray-600'" class="p-3 rounded-lg font-bold shadow-sm transition-all">
+                    批发模式
+                </button>
+            </div>
+
+            <div class="bg-black relative h-32 shrink-0 overflow-hidden mx-2 rounded-lg mb-2">
+                <div id="reader-cashier" class="w-full h-full object-cover"></div>
+                <div v-if="!cameraActive" @click="startCamera('cashier')" class="absolute inset-0 flex items-center justify-center text-white cursor-pointer bg-gray-800">
+                    <div class="text-center">
+                        <i class="ri-barcode-box-line text-2xl"></i>
+                        <div class="text-xs mt-1">点击扫码 / 扫码枪待命</div>
                     </div>
                 </div>
-                <div v-if="cart.length === 0" class="text-center text-gray-400 mt-10">
-                    <i class="fas fa-shopping-basket text-4xl mb-2"></i>
-                    <p>等待扫码...</p>
+                <div v-if="cameraActive" class="absolute inset-0 border-2 border-green-400 pointer-events-none"></div>
+            </div>
+
+            <div class="px-2 mb-2">
+                 <input v-model="cashierSearch" @keyup.enter="manualAdd" placeholder="输入条码或名称回车..." class="w-full bg-white px-4 py-3 rounded-lg shadow-sm outline-none border border-transparent focus:border-blue-500">
+            </div>
+
+            <div class="flex-1 overflow-y-auto px-2 space-y-2 pb-32">
+                <div v-for="(item, index) in cart" :key="index" class="bg-white p-3 rounded-lg shadow-sm flex justify-between items-start">
+                    <div class="flex-1">
+                        <div class="font-bold">{{ item.product_name }}</div>
+                        <div class="text-xs text-gray-400">{{ item.barcode }}</div>
+                        <div class="flex items-center mt-2 gap-3">
+                            <button @click="updateQty(index, -1)" class="w-8 h-8 rounded bg-gray-100 flex items-center justify-center text-lg font-bold">-</button>
+                            <span class="font-mono text-lg font-bold">{{ item.quantity }}</span>
+                            <button @click="updateQty(index, 1)" class="w-8 h-8 rounded bg-gray-100 flex items-center justify-center text-lg font-bold">+</button>
+                        </div>
+                    </div>
+                    <div class="flex flex-col items-end gap-1">
+                        <input type="number" v-model.number="item.unit_price" class="w-20 text-right bg-gray-50 border-b border-gray-300 focus:border-blue-500 outline-none font-mono" @change="saveCart">
+                        <div class="font-bold text-lg text-red-600">¥{{ (item.unit_price * item.quantity).toFixed(2) }}</div>
+                        <button @click="removeFromCart(index)" class="text-gray-400 text-xs mt-1 underline">删除</button>
+                    </div>
                 </div>
             </div>
 
-            <div class="bg-white border-t p-4 shadow-lg z-20">
-                <div class="flex justify-between items-end mb-2">
-                    <div class="text-sm text-gray-500">数量: {{ cartTotalQty }}</div>
-                    <div class="text-2xl font-bold text-blue-600">￥{{ cartTotalPrice }}</div>
+            <div class="absolute bottom-[4.5rem] left-0 right-0 bg-white border-t p-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-10">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-gray-500">共 {{ cartTotalQty }} 件</span>
+                    <span class="text-2xl font-bold text-red-600">¥{{ cartTotalPrice }}</span>
                 </div>
                 <div class="flex gap-2">
-                    <button @click="clearCart" class="px-4 py-3 border border-red-200 text-red-500 rounded-lg">清空</button>
-                    <button @click="checkout" class="flex-1 py-3 bg-blue-600 text-white rounded-lg font-bold shadow-lg active:scale-95 transition">确认收款</button>
+                    <button @click="clearCart" class="bg-gray-200 text-gray-700 px-4 rounded-lg font-bold">清空</button>
+                    <button @click="showCheckout = true" :disabled="cart.length === 0" class="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold text-lg shadow-lg disabled:opacity-50">
+                        收款
+                    </button>
                 </div>
             </div>
         </div>
 
-        <div v-if="currentPage === 'list'" class="p-4">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="font-bold">商品列表 ({{ products.length }})</h2>
-                <div class="space-x-2">
-                    <button @click="exportExcel" class="bg-green-500 text-white px-3 py-1 text-xs rounded">导出Excel</button>
-                    <label class="bg-blue-500 text-white px-3 py-1 text-xs rounded cursor-pointer">
-                        导入 <input type="file" @change="importExcel" class="hidden" accept=".xlsx,.xls">
-                    </label>
+        <div v-if="currentTab === 'orders'" class="p-2 space-y-2 pb-24">
+            <div class="grid grid-cols-2 gap-2 mb-2">
+                <div class="bg-blue-600 text-white p-3 rounded-lg shadow">
+                    <div class="text-xs opacity-80">今日销售额</div>
+                    <div class="text-xl font-bold">¥{{ todaySales.toFixed(2) }}</div>
+                </div>
+                <div class="bg-purple-600 text-white p-3 rounded-lg shadow">
+                    <div class="text-xs opacity-80">今日订单数</div>
+                    <div class="text-xl font-bold">{{ todayOrderCount }}</div>
                 </div>
             </div>
             
-            <div class="space-y-3">
-                <div v-for="p in products" :key="p.id" class="bg-white p-3 rounded shadow border-l-4 border-blue-500">
-                    <div class="flex justify-between items-start">
-                        <div class="flex-1">
-                            <input v-model="p.name" @change="updateProduct(p)" class="font-bold text-gray-800 w-full border-b border-dashed border-transparent focus:border-gray-300 outline-none mb-1">
-                            <div class="text-xs text-gray-400">{{ p.barcode }}</div>
-                        </div>
+            <div v-for="order in orders" :key="order.id" class="bg-white p-3 rounded-lg shadow-sm border-l-4" :class="order.status === 'void' ? 'border-gray-300 opacity-60' : 'border-green-500'">
+                <div class="flex justify-between">
+                    <span class="font-mono text-xs text-gray-500">{{ new Date(order.created_at).toLocaleString() }}</span>
+                    <span class="text-xs px-2 rounded" :class="order.price_type==='wholesale'?'bg-orange-100 text-orange-700':'bg-green-100 text-green-700'">{{ order.price_type === 'wholesale' ? '批发' : '零售' }}</span>
+                </div>
+                <div class="flex justify-between items-center mt-2">
+                    <div>
+                        <div class="font-bold text-lg">¥{{ order.total_price }}</div>
+                        <div class="text-xs text-gray-500">{{ order.payment_method }} | {{ order.total_quantity }} 件</div>
                     </div>
-                    <div class="flex gap-4 mt-2">
-                        <div class="flex-1">
-                            <label class="text-[10px] text-gray-400">批发价</label>
-                            <input type="number" v-model="p.wholesale_price" @change="updateProduct(p)" class="w-full text-sm p-1 border rounded text-red-500">
-                        </div>
-                        <div class="flex-1">
-                            <label class="text-[10px] text-gray-400">零售价</label>
-                            <input type="number" v-model="p.retail_price" @change="updateProduct(p)" class="w-full text-sm p-1 border rounded text-green-600">
-                        </div>
-                    </div>
+                    <button v-if="order.status !== 'void'" @click="voidOrder(order)" class="text-red-500 border border-red-200 px-3 py-1 rounded text-sm">作废</button>
+                    <span v-else class="text-gray-400 font-bold text-sm transform -rotate-12 border-2 border-gray-300 px-2">已作废</span>
                 </div>
             </div>
         </div>
 
     </div>
+
+    <div class="bg-white border-t h-16 shrink-0 flex justify-around items-center z-20 text-gray-500 pb-safe">
+        <button @click="switchTab('entry')" class="flex flex-col items-center w-full" :class="{'text-blue-600': currentTab==='entry'}">
+            <i class="ri-add-circle-line text-2xl mb-0.5"></i>
+            <span class="text-[10px]">商品录入</span>
+        </button>
+        <button @click="switchTab('manage')" class="flex flex-col items-center w-full" :class="{'text-blue-600': currentTab==='manage'}">
+            <i class="ri-archive-line text-2xl mb-0.5"></i>
+            <span class="text-[10px]">商品管理</span>
+        </button>
+        <button @click="switchTab('cashier')" class="flex flex-col items-center w-full" :class="{'text-blue-600': currentTab==='cashier'}">
+            <div class="bg-blue-100 p-2 rounded-full -mt-6 border-4 border-gray-100">
+                <i class="ri-hand-coin-line text-3xl text-blue-600"></i>
+            </div>
+            <span class="text-[10px] font-bold text-blue-600 mt-1">收银</span>
+        </button>
+        <button @click="switchTab('orders')" class="flex flex-col items-center w-full" :class="{'text-blue-600': currentTab==='orders'}">
+            <i class="ri-file-list-3-line text-2xl mb-0.5"></i>
+            <span class="text-[10px]">订单管理</span>
+        </button>
+    </div>
+
+    <div v-if="showCheckout" class="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
+        <div class="bg-white w-full rounded-t-2xl p-4 animate-slide-up">
+            <h3 class="font-bold text-center text-lg mb-4">选择支付方式</h3>
+            <div class="text-center mb-6">
+                <div class="text-gray-500 text-sm">应收金额</div>
+                <div class="text-4xl font-bold text-red-600">¥{{ cartTotalPrice }}</div>
+            </div>
+            <div class="grid grid-cols-2 gap-3 mb-4">
+                <button @click="finishCheckout('微信')" class="bg-[#09BB07] text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2"><i class="ri-wechat-line"></i> 微信</button>
+                <button @click="finishCheckout('支付宝')" class="bg-[#1678FF] text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2"><i class="ri-alipay-line"></i> 支付宝</button>
+                <button @click="finishCheckout('现金')" class="bg-yellow-500 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2"><i class="ri-money-cny-box-line"></i> 现金</button>
+                <button @click="finishCheckout('其他')" class="bg-gray-500 text-white py-3 rounded-lg font-bold">其他</button>
+            </div>
+            <button @click="showCheckout = false" class="w-full py-3 text-gray-500">取消</button>
+        </div>
+    </div>
+
+    <div v-if="editingProduct" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-xl p-4">
+            <h3 class="font-bold mb-4">编辑商品</h3>
+            <div class="space-y-3">
+                <input v-model="editingProduct.name" class="w-full border p-2 rounded" placeholder="名称">
+                <input v-model="editingProduct.barcode" class="w-full border p-2 rounded" placeholder="条码">
+                <div class="flex gap-2">
+                    <input v-model.number="editingProduct.wholesale_price" type="number" class="w-full border p-2 rounded" placeholder="批发价">
+                    <input v-model.number="editingProduct.retail_price" type="number" class="w-full border p-2 rounded" placeholder="零售价">
+                </div>
+                <div class="flex items-center gap-2 mt-2">
+                    <span class="text-sm">状态:</span>
+                    <button @click="editingProduct.status = editingProduct.status==='active'?'inactive':'active'" 
+                        class="px-3 py-1 rounded text-sm font-bold"
+                        :class="editingProduct.status==='active'?'bg-green-100 text-green-700':'bg-red-100 text-red-700'">
+                        {{ editingProduct.status==='active'?'启用':'已停用' }}
+                    </button>
+                </div>
+            </div>
+            <div class="flex gap-2 mt-4">
+                <button @click="editingProduct = null" class="flex-1 bg-gray-200 py-2 rounded">取消</button>
+                <button @click="saveEditedProduct" class="flex-1 bg-blue-600 text-white py-2 rounded font-bold">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <input ref="gunInput" type="text" class="gun-input" @blur="keepFocus" autocomplete="off">
+
 </div>
 
 <script>
-    const { createApp, ref, computed, onMounted, nextTick } = Vue;
-    
-    // 已为你填好 API Key
-    const SUPABASE_URL = 'https://ovhjhqfjygwzvfpaiejb.supabase.co'; 
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92aGpocWZqeWd3enZmcGFpZWpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc2MzU5ODcsImV4cCI6MjA4MzIxMTk4N30.r94pDQmmPzX3sD4u1oarFICDnijuC_vX5C51KhsmAbU'; 
+    const { createClient } = supabase;
 
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    // 👉 必填区域：Supabase Key (已按要求预填)
+    const SUPABASE_URL = 'https://ovhjhqfjygwzvfpaiejb.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92aGpocWZqeWd3enZmcGFpZWpiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NzYzNTk4NywiZXhwIjoyMDgzMjExOTg3fQ.GYw1xicPS93oQIqOJNaqzYlq7zTcst_jo5B7JEQYZCE';
+
+    const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const { createApp, ref, computed, onMounted, onUnmounted, watch, nextTick } = Vue;
 
     createApp({
         setup() {
-            const currentPage = ref('entry');
+            // 状态
+            const currentTab = ref('entry');
+            const isOnline = ref(navigator.onLine);
             const products = ref([]);
-            const showEntryForm = ref(false);
-            const entryMessage = ref('');
+            const orders = ref([]);
+            const searchText = ref('');
+            const cameraActive = ref(false);
+            const html5QrCode = ref(null);
+            
+            // 录入相关
             const entryForm = ref({ barcode: '', name: '', wholesale_price: '', retail_price: '' });
-            const scannerInput = ref(null);
-            const priceMode = ref('retail');
-            const cashierBarcode = ref('');
-            const cart = ref([]);
-            const cashierInput = ref(null);
-            const showCamera = ref(false);
-            let html5QrcodeScanner = null;
+            const untitledCount = ref(1);
 
-            onMounted(async () => {
-                await fetchProducts();
-                focusInput();
+            // 收银相关
+            const cashierMode = ref('retail'); // retail | wholesale
+            const cart = ref([]);
+            const cashierSearch = ref('');
+            const showCheckout = ref(false);
+
+            // 管理相关
+            const editingProduct = ref(null);
+
+            // 扫码锁
+            let scanLock = false;
+            let gunBuffer = '';
+            let gunTimeout = null;
+            const gunInput = ref(null);
+
+            // 计算属性
+            const currentTabName = computed(() => {
+                const map = { entry: '商品录入', manage: '商品库', cashier: '收银台', orders: '订单记录' };
+                return map[currentTab.value];
             });
 
-            const fetchProducts = async () => {
-                const { data, error } = await supabase.from('products').select('*').order('created_at', { ascending: false });
-                if (data) products.value = data;
-            };
+            const filteredProducts = computed(() => {
+                if(!searchText.value) return products.value;
+                const low = searchText.value.toLowerCase();
+                return products.value.filter(p => (p.name||'').toLowerCase().includes(low) || p.barcode.includes(low));
+            });
 
-            const focusInput = () => {
-                nextTick(() => {
-                    if (currentPage.value === 'entry' && scannerInput.value) scannerInput.value.focus();
-                    if (currentPage.value === 'cashier' && cashierInput.value) cashierInput.value.focus();
+            const cartTotalPrice = computed(() => {
+                return cart.value.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0).toFixed(2);
+            });
+
+            const cartTotalQty = computed(() => cart.value.reduce((sum, item) => sum + item.quantity, 0));
+
+            const autoNamePlaceholder = computed(() => `默认: 未命名${untitledCount.value}`);
+
+            const todaySales = computed(() => {
+                const today = new Date().toDateString();
+                return orders.value
+                    .filter(o => new Date(o.created_at).toDateString() === today && o.status === 'completed')
+                    .reduce((sum, o) => sum + o.total_price, 0);
+            });
+
+            const todayOrderCount = computed(() => {
+                const today = new Date().toDateString();
+                return orders.value.filter(o => new Date(o.created_at).toDateString() === today && o.status === 'completed').length;
+            });
+
+            // 初始化
+            onMounted(async () => {
+                loadLocalData();
+                await fetchProducts();
+                await fetchOrders();
+                window.addEventListener('online', () => { isOnline.value = true; syncData(); });
+                window.addEventListener('offline', () => isOnline.value = false);
+                
+                // 扫码枪全局监听
+                window.addEventListener('keydown', handleGunInput);
+                
+                // 页面可见性监听
+                document.addEventListener("visibilitychange", () => {
+                    if (document.hidden) stopCamera();
                 });
-            };
 
-            const toggleCamera = () => {
-                if (showCamera.value) {
-                    if(html5QrcodeScanner) html5QrcodeScanner.clear();
-                    showCamera.value = false;
-                } else {
-                    showCamera.value = true;
-                    const containerId = currentPage.value === 'entry' ? "reader" : "reader-cashier";
-                    nextTick(() => {
-                        html5QrcodeScanner = new Html5QrcodeScanner(containerId, { fps: 10, qrbox: 250 });
-                        html5QrcodeScanner.render((decodedText) => {
-                            if (currentPage.value === 'entry') {
-                                entryForm.value.barcode = decodedText;
-                                handleEntryScan();
-                            } else {
-                                cashierBarcode.value = decodedText;
-                                handleCashierScan();
-                            }
-                            toggleCamera();
-                        });
-                    });
+                // 初始启动录入摄像头
+                if(currentTab.value === 'entry') startCamera('entry');
+            });
+
+            // 方法
+            const switchTab = async (tab) => {
+                stopCamera();
+                currentTab.value = tab;
+                if (tab === 'entry' || tab === 'cashier') {
+                    // 延迟一点给DOM渲染
+                    setTimeout(() => startCamera(tab), 100);
                 }
             };
 
-            const handleEntryScan = async () => {
-                const code = entryForm.value.barcode.trim();
-                if (!code) return;
-                const existing = products.value.find(p => p.barcode === code);
-                if (existing) {
-                    currentPage.value = 'list';
-                    alert(`商品已存在：${existing.name}`);
-                    return;
+            // ---- 数据库交互 ----
+            const fetchProducts = async () => {
+                const { data, error } = await db.from('products').select('*').order('created_at', { ascending: false });
+                if (data) {
+                    products.value = data;
+                    localStorage.setItem('products', JSON.stringify(data));
+                    // 更新未命名计数
+                    const untitled = data.filter(p => p.name && p.name.startsWith('未命名'));
+                    if(untitled.length > 0) {
+                        const max = Math.max(...untitled.map(p => parseInt(p.name.replace('未命名', '')) || 0));
+                        untitledCount.value = max + 1;
+                    }
                 }
-                showEntryForm.value = true;
-                showCamera.value = false;
+            };
+
+            const fetchOrders = async () => {
+                const { data } = await db.from('orders').select('*').order('created_at', { ascending: false }).limit(50);
+                if(data) orders.value = data;
+            };
+
+            // ---- 录入逻辑 ----
+            const generateBarcode = () => {
+                entryForm.value.barcode = Date.now().toString().slice(-8) + Math.floor(Math.random()*1000);
             };
 
             const saveProduct = async () => {
-                let finalName = entryForm.value.name.trim();
-                if (!finalName) {
-                    const unnamedProducts = products.value.filter(p => p.name.startsWith('未命名'));
-                    if (unnamedProducts.length === 0) finalName = '未命名';
-                    else finalName = `未命名${unnamedProducts.length}`; 
-                }
+                if (!entryForm.value.barcode) return alert('必须有条码');
+                
+                const finalName = entryForm.value.name || `未命名${untitledCount.value}`;
+                
                 const newProduct = {
                     barcode: entryForm.value.barcode,
                     name: finalName,
                     wholesale_price: entryForm.value.wholesale_price || 0,
-                    retail_price: entryForm.value.retail_price || 0
+                    retail_price: entryForm.value.retail_price || 0,
+                    status: 'active'
                 };
-                const { data, error } = await supabase.from('products').insert([newProduct]).select();
-                if (!error) {
-                    products.value.unshift(data[0]);
-                    cancelEntry();
-                    entryMessage.value = `"${finalName}" 添加成功`;
-                    setTimeout(() => entryMessage.value = '', 2000);
+
+                // 本地乐观更新
+                products.value.unshift(newProduct);
+                
+                // 写入数据库
+                const { error } = await db.from('products').insert(newProduct);
+                
+                if (error) {
+                    if(error.code === '23505') alert('条码已存在！');
+                    else alert('保存失败');
                 } else {
-                    alert('保存失败: ' + error.message);
+                    // 重置表单
+                    if (!entryForm.value.name) untitledCount.value++;
+                    entryForm.value.barcode = '';
+                    entryForm.value.name = '';
+                    entryForm.value.wholesale_price = '';
+                    entryForm.value.retail_price = '';
+                    // 重新聚焦/开始扫描
+                    startCamera('entry');
                 }
             };
 
-            const cancelEntry = () => {
-                showEntryForm.value = false;
-                entryForm.value = { barcode: '', name: '', wholesale_price: '', retail_price: '' };
-                focusInput();
-            };
-
-            const handleCashierScan = () => {
-                const code = cashierBarcode.value.trim();
-                if (!code) return;
-                const product = products.value.find(p => p.barcode === code);
-                if (product) {
-                    const cartItem = cart.value.find(i => i.barcode === code);
-                    if (cartItem) cartItem.qty++;
-                    else cart.value.push({ ...product, qty: 1 });
-                } else {
-                    alert('未找到该商品，请先录入！');
+            // ---- 收银逻辑 ----
+            const addToCart = (barcode) => {
+                const product = products.value.find(p => p.barcode === barcode);
+                if (!product) {
+                    if(confirm('未找到该商品，是否跳转去录入？')) switchTab('entry');
+                    return;
                 }
-                cashierBarcode.value = '';
-                focusInput();
-            };
+                if (product.status !== 'active') return alert('商品已停用');
 
-            const updateQty = (index, delta) => {
-                const item = cart.value[index];
-                item.qty += delta;
-                if (item.qty <= 0) cart.value.splice(index, 1);
-            };
-
-            const cartTotalPrice = computed(() => {
-                return cart.value.reduce((total, item) => {
-                    const price = priceMode.value === 'retail' ? item.retail_price : item.wholesale_price;
-                    return total + (price * item.qty);
-                }, 0).toFixed(2);
-            });
-
-            const cartTotalQty = computed(() => cart.value.reduce((sum, item) => sum + item.qty, 0));
-            const clearCart = () => cart.value = [];
-            const checkout = async () => {
-                if (cart.value.length === 0) return;
-                const log = { items: cart.value, total_amount: cartTotalPrice.value, sale_type: priceMode.value };
-                const { error } = await supabase.from('sales_logs').insert([log]);
-                if (!error) {
-                    alert(`收款成功！总计: ￥${cartTotalPrice.value}`);
-                    clearCart();
+                const existing = cart.value.find(i => i.product_id === product.id);
+                if (existing) {
+                    existing.quantity++;
                 } else {
-                    alert('网络错误，记录失败');
+                    cart.value.push({
+                        product_id: product.id,
+                        product_name: product.name,
+                        barcode: product.barcode,
+                        unit_price: cashierMode.value === 'retail' ? product.retail_price : product.wholesale_price,
+                        quantity: 1
+                    });
+                }
+                saveCart();
+                playBeep();
+            };
+
+            const manualAdd = () => {
+                if(!cashierSearch.value) return;
+                // 优先精确匹配条码
+                const p = products.value.find(p => p.barcode === cashierSearch.value);
+                if(p) {
+                    addToCart(p.barcode);
+                    cashierSearch.value = '';
+                } else {
+                    // 模糊搜索名称
+                    const matches = products.value.filter(p => p.name.includes(cashierSearch.value));
+                    if(matches.length === 1) {
+                        addToCart(matches[0].barcode);
+                        cashierSearch.value = '';
+                    } else if (matches.length > 1) {
+                        alert(`找到 ${matches.length} 个商品，请输入更精确的名称或条码`);
+                    } else {
+                        alert('未找到商品');
+                    }
                 }
             };
 
-            const updateProduct = async (p) => {
-                await supabase.from('products').update({ name: p.name, wholesale_price: p.wholesale_price, retail_price: p.retail_price }).eq('id', p.id);
+            const updateQty = (index, change) => {
+                cart.value[index].quantity += change;
+                if (cart.value[index].quantity <= 0) cart.value.splice(index, 1);
+                saveCart();
+            };
+
+            const removeFromCart = (index) => {
+                cart.value.splice(index, 1);
+                saveCart();
+            };
+
+            const clearCart = () => {
+                if(confirm('确定清空购物车？')) {
+                    cart.value = [];
+                    saveCart();
+                }
+            };
+
+            const finishCheckout = async (method) => {
+                const order = {
+                    total_price: parseFloat(cartTotalPrice.value),
+                    total_quantity: cartTotalQty.value,
+                    price_type: cashierMode.value,
+                    payment_method: method,
+                    status: 'completed'
+                };
+
+                const { data: orderData, error } = await db.from('orders').insert(order).select().single();
+                
+                if (error) {
+                    alert('订单保存失败，请检查网络');
+                    return;
+                }
+
+                const items = cart.value.map(item => ({
+                    order_id: orderData.id,
+                    product_id: item.product_id,
+                    product_name: item.product_name,
+                    barcode: item.barcode,
+                    unit_price: item.unit_price,
+                    quantity: item.quantity,
+                    subtotal: item.unit_price * item.quantity
+                }));
+
+                await db.from('order_items').insert(items);
+                
+                showCheckout.value = false;
+                cart.value = [];
+                saveCart();
+                fetchOrders();
+            };
+
+            // ---- 摄像头逻辑 ----
+            const startCamera = (mode) => {
+                if (cameraActive.value) return; // 已运行
+                const elementId = mode === 'entry' ? 'reader-entry' : 'reader-cashier';
+                const el = document.getElementById(elementId);
+                if(!el) return;
+
+                html5QrCode.value = new Html5Qrcode(elementId);
+                const config = { fps: 10, qrbox: { width: 250, height: 150 }, aspectRatio: 1.777778 };
+                
+                // 可视化状态
+                el.innerHTML = '<div class="text-white text-center pt-10">启动摄像头中...</div>';
+
+                html5QrCode.value.start(
+                    { facingMode: { ideal: "environment" } }, 
+                    config, 
+                    (decodedText) => {
+                        // 成功回调
+                        if (scanLock) return;
+                        scanLock = true;
+                        
+                        // 停止扫描
+                        html5QrCode.value.pause(); 
+                        
+                        handleScanSuccess(decodedText, mode);
+
+                        // 冷却 500ms
+                        setTimeout(() => {
+                            scanLock = false;
+                            if(mode === 'entry' && !entryForm.value.barcode) {
+                                // 录入模式如果没填完，恢复扫描
+                                // 这里逻辑是：录入模式填入条码后，通常需要填名字，所以暂停比较好
+                                // 只有当保存后才恢复。但为了用户体验，我们只填值。
+                            } else {
+                                html5QrCode.value.resume();
+                            }
+                        }, 800);
+                    },
+                    (errorMessage) => { 
+                        // 忽略错误，避免刷屏
+                    }
+                ).then(() => {
+                    cameraActive.value = true;
+                }).catch(err => {
+                    console.error(err);
+                    alert('无法启动摄像头，请使用 HTTPS 或允许权限');
+                });
+            };
+
+            const stopCamera = () => {
+                if (html5QrCode.value && html5QrCode.value.isScanning) {
+                    html5QrCode.value.stop().then(() => {
+                        html5QrCode.value.clear();
+                        cameraActive.value = false;
+                    }).catch(err => console.log(err));
+                }
+            };
+
+            const handleScanSuccess = (code, mode) => {
+                playBeep();
+                if (mode === 'entry') {
+                    // 录入模式：填入条码
+                    entryForm.value.barcode = code;
+                    // 校验是否已存在
+                    const exist = products.value.find(p => p.barcode === code);
+                    if (exist) alert(`提示：商品库已存在此条码 (${exist.name})`);
+                    stopCamera(); // 录入成功暂停，等待输入价格
+                } else if (mode === 'cashier') {
+                    // 收银模式：加购
+                    addToCart(code);
+                    html5QrCode.value.resume(); // 立即恢复
+                }
+            };
+
+            // ---- 扫码枪兼容 ----
+            const handleGunInput = (e) => {
+                // 如果焦点在正常输入框，不拦截
+                if (e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') return;
+
+                if (e.key === 'Enter') {
+                    if (gunBuffer.length > 5) { // 简单过滤
+                        const code = gunBuffer;
+                        if (currentTab.value === 'entry') {
+                            entryForm.value.barcode = code;
+                        } else if (currentTab.value === 'cashier') {
+                            addToCart(code);
+                        } else if (currentTab.value === 'manage') {
+                            searchText.value = code;
+                        }
+                    }
+                    gunBuffer = '';
+                } else {
+                    // 仅数字或字母
+                    if (e.key.length === 1) gunBuffer += e.key;
+                    // 超时清空
+                    clearTimeout(gunTimeout);
+                    gunTimeout = setTimeout(() => gunBuffer = '', 100);
+                }
+            };
+
+            // ---- 其他辅助 ----
+            const playBeep = () => {
+                const audio = new AudioContext();
+                const osc = audio.createOscillator();
+                const gain = audio.createGain();
+                osc.connect(gain);
+                gain.connect(audio.destination);
+                osc.frequency.value = 1500;
+                gain.gain.value = 0.1;
+                osc.start();
+                setTimeout(() => osc.stop(), 100);
+            };
+
+            const loadLocalData = () => {
+                const p = localStorage.getItem('products');
+                if(p) products.value = JSON.parse(p);
+                const c = localStorage.getItem('cart');
+                if(c) cart.value = JSON.parse(c);
+            };
+
+            const syncData = () => {
+                fetchProducts();
+            };
+
+            const saveCart = () => {
+                localStorage.setItem('cart', JSON.stringify(cart.value));
+            };
+
+            // 管理功能
+            const editProduct = (p) => {
+                editingProduct.value = { ...p };
+            };
+            
+            const saveEditedProduct = async () => {
+                const { error } = await db.from('products').update(editingProduct.value).eq('id', editingProduct.value.id);
+                if(!error) {
+                    editingProduct.value = null;
+                    fetchProducts();
+                } else {
+                    alert('更新失败');
+                }
             };
 
             const exportExcel = () => {
                 const ws = XLSX.utils.json_to_sheet(products.value);
                 const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, "商品数据");
-                XLSX.writeFile(wb, "商品导出.xlsx");
+                XLSX.utils.book_append_sheet(wb, ws, "Products");
+                XLSX.writeFile(wb, "products_backup.xlsx");
             };
 
-            const importExcel = (event) => {
-                const file = event.target.files[0];
+            const importExcel = (e) => {
+                const file = e.target.files[0];
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
+                    const workbook = XLSX.read(data, {type: 'array'});
                     const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-                    jsonData.forEach(async (row) => {
-                        if (row.barcode) {
-                            const exists = products.value.find(p => p.barcode == row.barcode);
-                            if (!exists) {
-                                await supabase.from('products').insert([{
-                                    barcode: String(row.barcode),
-                                    name: row.name || '未命名导入',
-                                    wholesale_price: row.wholesale_price || 0,
-                                    retail_price: row.retail_price || 0
-                                }]);
-                            }
-                        }
-                    });
-                    alert('导入任务已开始，请稍后刷新页面查看');
-                    setTimeout(fetchProducts, 2000);
+                    if(jsonData.length > 0 && confirm(`准备导入 ${jsonData.length} 条数据？`)) {
+                        // 简单批量插入，实际使用建议分批
+                         jsonData.forEach(async item => {
+                             // 映射字段（假设 Excel 列表头匹配，如果不匹配要做映射）
+                             const p = {
+                                 barcode: item.barcode || item['条码'],
+                                 name: item.name || item['商品名'] || item['名称'],
+                                 wholesale_price: item.wholesale_price || item['批发价'] || 0,
+                                 retail_price: item.retail_price || item['零售价'] || 0
+                             };
+                             if(p.barcode) await db.from('products').upsert(p, { onConflict: 'barcode' });
+                         });
+                         alert('后台正在导入，请稍后刷新');
+                         setTimeout(fetchProducts, 2000);
+                    }
                 };
                 reader.readAsArrayBuffer(file);
             };
 
+            const voidOrder = async (order) => {
+                if(!confirm('确定作废此订单？不可恢复。')) return;
+                const { error } = await db.from('orders').update({ status: 'void' }).eq('id', order.id);
+                if(!error) {
+                    order.status = 'void';
+                }
+            };
+            
+            const keepFocus = () => {
+               // 保持焦点逻辑在移动端可能会引起键盘弹出，这里主要靠 window keydown 监听
+            };
+
             return {
-                pageTitles: { entry: '商品录入', cashier: '收银台', list: '库存管理' },
-                currentPage, products, showEntryForm, entryForm, entryMessage, scannerInput, handleEntryScan, saveProduct, cancelEntry,
-                priceMode, cashierBarcode, cart, cashierInput, handleCashierScan, updateQty, cartTotalPrice, cartTotalQty, clearCart, checkout,
-                showCamera, toggleCamera, updateProduct, exportExcel, importExcel
+                currentTab, switchTab, currentTabName, isOnline,
+                products, filteredProducts, searchText,
+                entryForm, saveProduct, generateBarcode, autoNamePlaceholder,
+                cart, addToCart, cashierMode, updateQty, removeFromCart, clearCart, cartTotalPrice, cartTotalQty, cashierSearch, manualAdd,
+                showCheckout, finishCheckout,
+                orders, todaySales, todayOrderCount, voidOrder,
+                editingProduct, editProduct, saveEditedProduct,
+                exportExcel, importExcel,
+                startCamera, stopCamera, cameraActive
             };
         }
     }).mount('#app');
