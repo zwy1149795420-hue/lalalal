@@ -326,7 +326,15 @@
             <div class="space-y-3">
                 <div><label class="text-xs font-bold text-slate-400">条码</label><input v-model="editingProduct.barcode" class="w-full p-3 border border-slate-200 rounded-lg bg-yellow-50 font-mono text-slate-700"></div>
                 <div><label class="text-xs font-bold text-slate-400">名称</label><input v-model="editingProduct.name" class="w-full p-3 border border-slate-200 rounded-lg"></div>
-                <div><label class="text-xs font-bold text-slate-400">分类</label><input list="category-list" v-model="editingProduct.category" class="w-full p-3 border border-slate-200 rounded-lg font-bold"></div>
+                
+                <div>
+                    <label class="text-xs font-bold text-slate-400">分类 (选择或输入新建)</label>
+                    <input list="category-list-edit" v-model="editingProduct.category" class="w-full p-3 border border-slate-200 rounded-lg font-bold text-slate-700" placeholder="例如: 饮料">
+                    <datalist id="category-list-edit">
+                        <option v-for="cat in allCategories" :key="cat" :value="cat"></option>
+                    </datalist>
+                </div>
+
                 <div class="flex gap-3">
                     <div class="flex-1"><label class="text-xs font-bold text-slate-400">批发价</label><input v-model="editingProduct.wholesale_price" type="number" class="w-full p-3 border border-slate-200 rounded-lg font-bold"></div>
                     <div class="flex-1"><label class="text-xs font-bold text-slate-400">零售价</label><input v-model="editingProduct.retail_price" type="number" class="w-full p-3 border border-slate-200 rounded-lg font-bold text-blue-600"></div>
@@ -340,7 +348,7 @@
                 </div>
             </div>
             <div class="grid grid-cols-2 gap-3 mt-6">
-                <button @click="deleteProduct" class="py-3 bg-red-50 text-red-600 rounded-xl font-bold text-sm">彻底删除</button>
+                <button @click="deleteProduct" class="py-3 bg-red-50 text-red-600 rounded-xl font-bold text-sm">删除 / 停用</button>
                 <button @click="updateProduct" class="py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg">保存</button>
             </div>
             <button @click="editingProduct = null" class="w-full mt-3 py-2 text-slate-400 text-xs">取消</button>
@@ -404,9 +412,9 @@
                 supabase: null, isOnline: navigator.onLine, currentTab: 'cashier', 
                 products: [], orders: [], orderItems: [], 
                 entryForm: { barcode: '', name: '', category: '', wholesale_price: '', retail_price: '' },
-                quickAddForm: { barcode: '', retail_price: '' }, // 极简补录表单
+                quickAddForm: { barcode: '', retail_price: '' }, 
                 scanning: false, html5QrCode: null, scanError: '', lastScanTime: 0, scanCooldown: 2000, justScanned: false,
-                searchText: '', productFilterStatus: 'active', productFilterCategory: 'all', orderFilterType: 'completed', // 订单筛选
+                searchText: '', productFilterStatus: 'active', productFilterCategory: 'all', orderFilterType: 'completed', 
                 editingProduct: null, showQuickAdd: false, priceMode: 'retail', cashierSearch: '', cart: [],
                 rankingRange: 'today', viewingOrder: null, syncQueue: JSON.parse(localStorage.getItem('syncQueue') || '[]')
             }
@@ -532,11 +540,34 @@
                 localStorage.setItem('products', JSON.stringify(this.products));
                 const { id, ...updates } = this.editingProduct; this.addToSyncQueue('products', 'update', { id, ...updates }); this.editingProduct = null;
             },
+            
+            // === 智能删除逻辑 ===
             async deleteProduct() {
-                if(!confirm('⚠️ 警告：确定要彻底删除此商品吗？')) return; const idToDelete = this.editingProduct.id;
-                this.products = this.products.filter(p => p.id !== idToDelete); localStorage.setItem('products', JSON.stringify(this.products));
-                if (this.isOnline) { const { error } = await this.supabase.from('products').delete().eq('id', idToDelete); if (error) { alert('删除失败：可能已有订单关联'); this.fetchData(); } } else { alert('离线无法删除'); } this.editingProduct = null;
+                if(!confirm('⚠️ 警告：确定要删除此商品吗？')) return;
+                const idToDelete = this.editingProduct.id;
+                
+                if (this.isOnline) {
+                    // 1. 尝试远程物理删除
+                    const { error } = await this.supabase.from('products').delete().eq('id', idToDelete);
+                    if (error) {
+                        // 2. 失败转停用
+                        await this.supabase.from('products').update({ status: 'disabled' }).eq('id', idToDelete);
+                        const idx = this.products.findIndex(p => p.id === idToDelete);
+                        if (idx !== -1) this.products[idx].status = 'disabled';
+                        localStorage.setItem('products', JSON.stringify(this.products));
+                        alert('💡 提示：该商品存在关联订单，无法彻底删除。\n已为您自动转为【暂停销售】状态。');
+                    } else {
+                        // 3. 成功删除
+                        this.products = this.products.filter(p => p.id !== idToDelete);
+                        localStorage.setItem('products', JSON.stringify(this.products));
+                        alert('商品已彻底删除');
+                    }
+                } else {
+                    alert('离线模式无法删除');
+                }
+                this.editingProduct = null;
             },
+
             exportExcel() { const ws = XLSX.utils.json_to_sheet(this.products); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Products"); XLSX.writeFile(wb, "Products_Brazil.xlsx"); },
             importExcel(e) { const f = e.target.files[0]; const r = new FileReader(); r.onload = (evt) => { const wb = XLSX.read(evt.target.result, { type: 'binary' }); const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]); if(confirm(`导入 ${data.length} 条?`)) { data.forEach(row => { const p = { barcode: row['barcode']||row['条码'], name: row['name']||row['名称'], category: row['category']||'默认', wholesale_price: row['wholesale']||0, retail_price: row['retail']||0, status: 'active' }; if(p.barcode) this.addToSyncQueue('products', 'insert', p); }); alert('已加入队列'); } }; r.readAsBinaryString(f); },
             formatDate(str) { if(!str) return ''; return new Date(str).toLocaleString('zh-CN', { timeZone: 'America/Sao_Paulo', month:'numeric', day:'numeric', hour:'numeric', minute:'numeric', hour12: false }); },
@@ -551,4 +582,3 @@
 </script>
 </body>
 </html>
-
