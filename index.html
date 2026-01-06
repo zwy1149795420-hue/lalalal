@@ -719,7 +719,29 @@
             getNextName() { let max = 0; const regex = /^未命名(\d+)$/; this.products.forEach(p => { const match = p.name.match(regex); if (match) { const num = parseInt(match[1]); if (num > max) max = num; } }); return `未命名${max + 1}`; },
             handleBarcodeEnter() { if (!this.entryForm.barcode) return; const exists = this.products.find(p => p.barcode === this.entryForm.barcode); if (exists) alert('条码已存在: ' + exists.name); },
             scrollToInput(event) { const el = event.target; setTimeout(() => { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300); },
-            async switchTab(tab) { if (this.scanning) await this.stopScanner(); this.currentTab = tab; },
+                        // ✅ 切换标签页 (修复版：带自动聚焦)
+            async switchTab(tab) { 
+                // 如果正在扫码，先关闭
+                if (this.scanning) await this.stopScanner(); 
+                
+                this.currentTab = tab; 
+                
+                // 🚀 [关键添加] 切换页面后，自动聚焦到对应的输入框
+                this.$nextTick(() => {
+                    if (!this.isMobile) {
+                        if (tab === 'cashier' && this.$refs.cashierInput) {
+                            this.$refs.cashierInput.focus();
+                        }
+                        if (tab === 'entry' && this.$refs.barcodeInput) {
+                            this.$refs.barcodeInput.focus();
+                        }
+                        if (tab === 'manage' && this.$refs.manageInput) {
+                            this.$refs.manageInput.focus();
+                        }
+                    }
+                });
+            },
+
             switchPriceMode(mode) { this.priceMode = mode; this.cart.forEach(item => { const product = this.products.find(p => p.id === item.product_id); if (product) item.unit_price = mode === 'retail' ? product.retail_price : product.wholesale_price; }); },
             
             // 收银
@@ -795,5 +817,6 @@
 </script>
 </body>
 </html>
+
 
 
