@@ -650,12 +650,43 @@ async mounted() {
             // 🔔 核心交互：扫码音效
             // -----------------------------------------------------------
             playBeep() { 
-                // 使用 Base64 编码的短促"滴"声 WAV 文件，无需外部资源
-                const a = new Audio("data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU"); 
+                // 使用更清晰响亮的“滴”声 Base64
+                const a = new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAAB3d3d3d3d3d4eHh4eHh4eHl5eXl5eXl5eYmJiYmJiYmJiXl5eXl5eXl5eHh4eHh4eHh4d3d3d3d3d3d3d3d3d3d3d3d4eHh4eHh4eHl5eXl5eXl5eYmJiYmJiYmJiXl5eXl5eXl5eHh4eHh4eHh4d3d3d3d3d3dw=="); 
                 a.volume = 1.0;
-                a.play().catch(e => console.log("Audio play failed:", e)); 
+                a.currentTime = 0; // 关键：每次播放前重置进度，防止连续扫描时没声音
+                a.play().catch(e => console.log("声音播放被拦截:", e)); 
+                
+                // 兼容性震动 (仅安卓生效)
+                if (navigator.vibrate) navigator.vibrate(200);
             },
             
+            onScanSuccess(decodedText, tab) {
+                const now = Date.now(); 
+                if (now - this.lastScanTime < this.scanCooldown) return; 
+                this.lastScanTime = now; 
+                
+                // 1. 立即播放声音
+                this.playBeep();
+                
+                // 2. 逻辑处理
+                if (tab === 'entry') { 
+                    this.entryForm.barcode = decodedText; 
+                    
+                    if (this.isMobile) {
+                        this.stopScanner(); // 停止扫描
+                        this.showEntryModal = true; // 弹出录入窗
+                    } else {
+                        this.handleBarcodeEnter(); 
+                    }
+                } 
+                else if (tab === 'cashier') { 
+                    this.cashierSearch = decodedText; 
+                    this.addToCartByInput(); 
+                }
+                else if (tab === 'manage') { 
+                    this.searchText = decodedText; 
+                }
+            },
             // -----------------------------------------------------------
             // 📸 核心功能：摄像头扫码逻辑
             // -----------------------------------------------------------
@@ -669,10 +700,8 @@ async mounted() {
                     this.startScanner(tab); 
                 } 
             },
-            
             async startScanner(tab) {
                 this.scanError = ''; 
-                // 根据当前 Tab 决定挂载点 ID
                 const elementId = tab === 'entry' ? "reader" : (tab === 'manage' ? 'manage-reader' : "cashier-reader");
                 
                 if (!this.html5QrCode) { 
@@ -680,14 +709,26 @@ async mounted() {
                 }
                 
                 try { 
-                    // 启动摄像头
+                    this.scanning = true; 
+                    
+                    // 🚀 核心修改：优化扫描配置
+                    const config = { 
+                        fps: 15, // 提高帧率
+                        qrbox: { width: 280, height: 150 }, // 改为长方形扫描框，更契合条形码
+                        aspectRatio: 1.0,
+                        experimentalFeatures: {
+                            useBarCodeDetectorIfSupported: true // 🚀 关键：启用手机原生扫码能力，大幅提升准确度
+                        }
+                    };
+
                     await this.html5QrCode.start(
-                        { facingMode: "environment" }, // 优先使用后置摄像头
-                        { fps: 10, qrbox: { width: 250, height: 250 } }, 
+                        { facingMode: "environment" }, 
+                        config, 
                         (decodedText) => this.onScanSuccess(decodedText, tab), 
-                        (errorMessage) => { /* 忽略扫描过程中的每一帧错误 */ }
+                        (errorMessage) => { /* 忽略报错 */ }
                     ); 
                 } catch (err) { 
+                    console.error(err);
                     this.scanning = false; 
                     this.scanError = "摄像头启动失败，请检查权限"; 
                     this.html5QrCode = null; 
@@ -1149,4 +1190,5 @@ async mounted() {
 </script>
 </body>
 </html>
+
 
