@@ -69,7 +69,7 @@
             </div>
         </header>
 
-        <div ref="mainContent" class="flex-1 overflow-y-auto hide-scrollbar p-3 md:p-8 bg-slate-50/50 pb-[300px] md:pb-8">
+        <div ref="mainContent" class="flex-1 overflow-y-auto hide-scrollbar p-3 md:p-8 bg-slate-50/50 pb-24 md:pb-8">
             
             <div v-if="currentTab === 'cashier'" class="h-full flex flex-col md:flex-row gap-4">
                 
@@ -110,7 +110,7 @@
                             <button @click="clearCart" class="text-red-500 text-sm font-bold hover:bg-red-50 px-2 py-1 rounded" v-if="cart.length > 0">清空</button>
                         </div>
                         
-                        <div class="flex-1 overflow-y-auto p-3 space-y-2">
+                        <div class="flex-1 overflow-y-auto p-3 space-y-2" id="cartContainer">
                             <div v-if="cart.length === 0" class="h-full flex flex-col items-center justify-center text-slate-300">
                                 <i class="ph-shopping-cart text-6xl mb-4 text-slate-200"></i>
                                 <p>当前按 {{ priceMode==='retail'?'零售价':'批发价' }} 结算</p>
@@ -210,12 +210,7 @@
                             <i :class="scanning ? 'ph-x' : 'ph-camera'" class="text-xl"></i> {{ scanning ? '停止' : '扫描' }}
                         </button>
                     </div>
-                    <div v-else class="bg-blue-50 p-6 rounded-2xl border border-blue-100 text-center text-blue-800 h-[200px] flex flex-col items-center justify-center">
-                        <i class="ph-barcode text-6xl mb-4 opacity-50"></i>
-                        <p class="font-bold">请使用扫码枪录入</p>
-                        <p class="text-sm opacity-70">光标已自动聚焦</p>
                     </div>
-                </div>
 
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-fit">
                     <h2 class="text-lg font-bold mb-4 flex items-center gap-2 text-slate-800"><i class="ph-plus-circle text-blue-600"></i> 新增商品</h2>
@@ -447,7 +442,11 @@
             window.addEventListener('online', () => { this.isOnline = true; this.processSyncQueue(); });
             window.addEventListener('offline', () => { this.isOnline = false; });
             setInterval(this.processSyncQueue, 10000);
-            this.$nextTick(() => { if(this.$refs.cashierInput) this.$refs.cashierInput.focus(); });
+            
+            // 修改点2：如果是移动端，页面加载时不自动聚焦
+            this.$nextTick(() => { 
+                if(this.$refs.cashierInput && !this.isMobile) this.$refs.cashierInput.focus(); 
+            });
         },
         methods: {
             playBeep() { const a = new Audio("data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU"); a.play().catch(()=>{}); },
@@ -477,9 +476,12 @@
                 if (this.scanning) await this.stopScanner(); 
                 this.currentTab = tab; 
                 this.$nextTick(() => {
-                    if (tab === 'cashier' && this.$refs.cashierInput) this.$refs.cashierInput.focus();
-                    if (tab === 'entry' && this.$refs.barcodeInput) this.$refs.barcodeInput.focus();
-                    if (tab === 'manage' && this.$refs.manageInput) this.$refs.manageInput.focus();
+                    // 修改点2：切换 Tab 时，仅在非移动端自动聚焦
+                    if (!this.isMobile) {
+                        if (tab === 'cashier' && this.$refs.cashierInput) this.$refs.cashierInput.focus();
+                        if (tab === 'entry' && this.$refs.barcodeInput) this.$refs.barcodeInput.focus();
+                        if (tab === 'manage' && this.$refs.manageInput) this.$refs.manageInput.focus();
+                    }
                 });
             },
             
@@ -563,7 +565,10 @@
                 this.recentProducts.unshift(p);
                 if (this.recentProducts.length > 10) this.recentProducts.pop();
 
-                this.entryForm = { barcode: '', name: '', category: '', wholesale_price: '', retail_price: '' }; this.$refs.barcodeInput.focus();
+                this.entryForm = { barcode: '', name: '', category: '', wholesale_price: '', retail_price: '' }; 
+                
+                // 修改点2：仅在非移动端保存后自动聚焦
+                if (!this.isMobile) this.$refs.barcodeInput.focus();
             },
             
             removeFromCart(idx) { this.cart.splice(idx, 1); },
@@ -608,7 +613,8 @@
                         alert('💡 提示：该商品存在关联订单，无法彻底删除。\n已为您自动转为【暂停销售】状态。');
                     } else {
                         this.products = this.products.filter(p => p.id !== idToDelete); localStorage.setItem('products', JSON.stringify(this.products));
-                        alert('商品已彻底删除');
+                        // 修改点4：删除成功的 alert 已经被移除
+                        console.log('商品删除成功'); 
                     }
                 } else { alert('离线模式无法删除'); }
                 this.editingProduct = null;
