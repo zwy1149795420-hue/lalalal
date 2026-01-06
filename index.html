@@ -719,12 +719,33 @@
             getNextName() { let max = 0; const regex = /^未命名(\d+)$/; this.products.forEach(p => { const match = p.name.match(regex); if (match) { const num = parseInt(match[1]); if (num > max) max = num; } }); return `未命名${max + 1}`; },
             handleBarcodeEnter() { if (!this.entryForm.barcode) return; const exists = this.products.find(p => p.barcode === this.entryForm.barcode); if (exists) alert('条码已存在: ' + exists.name); },
             scrollToInput(event) { const el = event.target; setTimeout(() => { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300); },
-                        // ✅ 切换标签页 (修复版：带自动聚焦)
+                        // ✅ 切换标签页 (完美修复版：支持三个页面的自动聚焦)
             async switchTab(tab) { 
-                // 如果正在扫码，先关闭
+                // 1. 如果摄像头开着，先关闭
                 if (this.scanning) await this.stopScanner(); 
                 
+                // 2. 切换页面
                 this.currentTab = tab; 
+                
+                // 3. 等待页面渲染完成后，自动聚焦到对应输入框
+                this.$nextTick(() => {
+                    // 仅在电脑端生效（手机端自动聚焦会弹出键盘，体验不好）
+                    if (!this.isMobile) {
+                        // 场景一：点击“收银台” -> 聚焦收银输入框
+                        if (tab === 'cashier' && this.$refs.cashierInput) {
+                            this.$refs.cashierInput.focus();
+                        }
+                        // 场景二：点击“商品录入” -> 聚焦条码录入框
+                        if (tab === 'entry' && this.$refs.barcodeInput) {
+                            this.$refs.barcodeInput.focus();
+                        }
+                        // 场景三：点击“商品管理” -> 聚焦搜索框
+                        if (tab === 'manage' && this.$refs.manageInput) {
+                            this.$refs.manageInput.focus();
+                        }
+                    }
+                });
+            },
                 
                 // 🚀 [关键添加] 切换页面后，自动聚焦到对应的输入框
                 this.$nextTick(() => {
@@ -817,6 +838,7 @@
 </script>
 </body>
 </html>
+
 
 
 
