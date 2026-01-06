@@ -15,7 +15,7 @@
     <style>
         body { margin: 0; background-color: #f8fafc; -webkit-tap-highlight-color: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
         
-        /* 摄像头样式 */
+        /* 摄像头 */
         .scan-container {
             width: 100%;
             height: 100%;
@@ -40,7 +40,7 @@
         }
         .scan-success-anim { animation: flash-green 0.5s ease-out; }
         
-        /* 滚动条隐藏 */
+        /* 滚动条 */
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
@@ -49,7 +49,7 @@
         input:focus { outline: none; border-color: #3b82f6; ring: 2px; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
         [v-cloak] { display: none; }
 
-        /* 底部导航栏美化 - iOS 风格 */
+        /* 导航栏 */
         .nav-blur {
             background: rgba(255, 255, 255, 0.9);
             backdrop-filter: blur(10px);
@@ -57,26 +57,13 @@
             border-top: 1px solid rgba(0,0,0,0.05);
             padding-bottom: env(safe-area-inset-bottom);
         }
-        .nav-item {
-            position: relative;
-            transition: all 0.3s ease;
-        }
-        .nav-item.active {
-            color: #2563eb;
-        }
+        .nav-item { position: relative; transition: all 0.3s ease; }
+        .nav-item.active { color: #2563eb; }
         .nav-item.active::after {
-            content: '';
-            position: absolute;
-            top: -12px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 40px;
-            height: 4px;
-            background: #2563eb;
-            border-radius: 0 0 4px 4px;
+            content: ''; position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+            width: 40px; height: 4px; background: #2563eb; border-radius: 0 0 4px 4px;
         }
 
-        /* 桌面端适配 */
         @media (min-width: 768px) {
             .desktop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; }
         }
@@ -84,7 +71,7 @@
 </head>
 <body>
 
-<div id="app" v-cloak class="h-screen w-full flex flex-col md:flex-row bg-gray-50 overflow-hidden text-slate-800">
+<div id="app" v-cloak class="h-screen w-full flex flex-col md:flex-row bg-slate-50 overflow-hidden text-slate-800">
 
     <aside class="hidden md:flex w-64 bg-slate-900 text-white flex-col shrink-0">
         <div class="p-6 border-b border-slate-800">
@@ -137,7 +124,6 @@
                                 <i class="ph-qr-code text-xl"></i>
                             </button>
                         </div>
-
                         <div v-show="scanning" :class="{'scan-success-anim': justScanned}" class="scan-container shadow-inner border border-slate-200">
                             <div id="cashier-reader" class="w-full h-full"></div>
                             <div class="absolute inset-0 pointer-events-none border-[3px] border-blue-500/30 rounded-16"></div>
@@ -151,7 +137,6 @@
                         <h3 class="font-bold text-slate-700">购物车 ({{ cartTotalQty }})</h3>
                         <button @click="clearCart" class="text-red-500 text-sm font-bold" v-if="cart.length > 0">清空</button>
                     </div>
-
                     <div class="flex-1 overflow-y-auto p-3 space-y-2">
                         <div v-if="cart.length === 0" class="h-full flex flex-col items-center justify-center text-slate-300">
                             <i class="ph-shopping-cart text-5xl mb-2"></i>
@@ -178,7 +163,6 @@
                             </div>
                         </div>
                     </div>
-
                     <div class="p-4 border-t border-slate-100 bg-slate-50 flex flex-col gap-3">
                         <div class="flex justify-between items-end">
                             <span class="text-slate-500 text-sm">合计金额</span>
@@ -203,7 +187,6 @@
                         <input type="file" @change="importExcel" class="hidden" accept=".xlsx,.xls">
                     </label>
                 </div>
-
                 <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
                     <div v-for="p in filteredProducts" :key="p.id" @click="editProduct(p)" class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 active:scale-98 transition-transform cursor-pointer relative overflow-hidden">
                         <div v-if="p.status==='disabled'" class="absolute right-0 top-0 bg-red-100 text-red-600 text-[10px] px-2 py-1 rounded-bl-lg font-bold">已停用</div>
@@ -215,7 +198,6 @@
                         </div>
                     </div>
                 </div>
-                <div v-if="filteredProducts.length === 0" class="text-center py-10 text-slate-400">无数据</div>
             </div>
 
             <div v-if="currentTab === 'entry'" class="flex flex-col lg:flex-row gap-4 max-w-5xl mx-auto">
@@ -236,7 +218,6 @@
                     </button>
                     <p v-if="scanError" class="absolute top-0 w-full text-center text-white bg-red-500/80 text-xs py-1">{{ scanError }}</p>
                 </div>
-
                 <div class="w-full lg:w-1/2 bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
                     <h2 class="text-lg font-bold mb-4 flex items-center gap-2 text-slate-800"><i class="ph-plus-circle text-blue-600"></i> 新增商品</h2>
                     <div class="space-y-4">
@@ -276,6 +257,34 @@
                         <div class="text-3xl font-black text-slate-800 mt-1">{{ todayItems }} <span class="text-sm font-normal text-slate-400">件</span></div>
                     </div>
                 </div>
+                
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div class="p-3 border-b border-slate-100 font-bold text-sm text-slate-700 bg-slate-50 flex items-center justify-between">
+                        <span>📊 商品热销榜 (今日)</span>
+                    </div>
+                    <div class="max-h-[300px] overflow-y-auto">
+                        <table class="w-full text-left">
+                            <thead class="text-xs text-slate-400 bg-slate-50 sticky top-0">
+                                <tr>
+                                    <th class="p-3 font-bold">商品名称</th>
+                                    <th class="p-3 font-bold text-right">数量</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-50">
+                                <tr v-for="stat in productSalesStats" :key="stat.barcode">
+                                    <td class="p-3 text-sm text-slate-700 font-bold">
+                                        <div class="truncate max-w-[200px]">{{ stat.name }}</div>
+                                        <div class="text-[10px] text-slate-400 font-mono">{{ stat.barcode }}</div>
+                                    </td>
+                                    <td class="p-3 text-sm text-slate-900 font-bold text-right">{{ stat.qty }}</td>
+                                </tr>
+                                <tr v-if="productSalesStats.length === 0">
+                                    <td colspan="2" class="p-6 text-center text-xs text-slate-400">今日暂无商品销售</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
 
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                     <div class="p-3 border-b border-slate-100 font-bold text-sm text-slate-700 bg-slate-50">最近订单</div>
@@ -284,7 +293,7 @@
                             <div>
                                 <div class="text-xs text-slate-400 mb-1 font-mono">{{ formatDate(order.created_at) }}</div>
                                 <div class="font-bold text-slate-800">R$ {{ order.total_price }}</div>
-                                <div class="text-xs text-slate-500 mt-0.5">{{ order.total_quantity }} 件商品 / {{ order.price_type==='retail'?'零售':'批发' }}</div>
+                                <div class="text-xs text-slate-500 mt-0.5">{{ order.total_quantity }} 件 / {{ order.price_type==='retail'?'零售':'批发' }}</div>
                             </div>
                             <div class="text-right">
                                 <span v-if="order.status==='completed'" class="bg-green-100 text-green-700 text-[10px] px-2 py-1 rounded font-bold">完成</span>
@@ -302,20 +311,16 @@
 
         <nav class="md:hidden fixed bottom-0 left-0 right-0 h-[80px] nav-blur flex justify-around items-center z-40 text-slate-400">
             <div @click="switchTab('cashier')" :class="{'active': currentTab==='cashier'}" class="nav-item flex flex-col items-center w-1/4 btn-press">
-                <i class="ph-barcode text-2xl mb-1"></i>
-                <span class="text-[10px] font-bold">收银</span>
+                <i class="ph-barcode text-2xl mb-1"></i><span class="text-[10px] font-bold">收银</span>
             </div>
             <div @click="switchTab('entry')" :class="{'active': currentTab==='entry'}" class="nav-item flex flex-col items-center w-1/4 btn-press">
-                <i class="ph-plus-circle text-2xl mb-1"></i>
-                <span class="text-[10px] font-bold">录入</span>
+                <i class="ph-plus-circle text-2xl mb-1"></i><span class="text-[10px] font-bold">录入</span>
             </div>
             <div @click="switchTab('manage')" :class="{'active': currentTab==='manage'}" class="nav-item flex flex-col items-center w-1/4 btn-press">
-                <i class="ph-package text-2xl mb-1"></i>
-                <span class="text-[10px] font-bold">管理</span>
+                <i class="ph-package text-2xl mb-1"></i><span class="text-[10px] font-bold">管理</span>
             </div>
             <div @click="switchTab('orders')" :class="{'active': currentTab==='orders'}" class="nav-item flex flex-col items-center w-1/4 btn-press">
-                <i class="ph-chart-bar text-2xl mb-1"></i>
-                <span class="text-[10px] font-bold">报表</span>
+                <i class="ph-chart-bar text-2xl mb-1"></i><span class="text-[10px] font-bold">报表</span>
             </div>
         </nav>
 
@@ -407,19 +412,37 @@
             cartTotalQty() { return this.cart.reduce((sum, item) => sum + item.quantity, 0); },
             sortedOrders() { return [...this.orders].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); },
             
-            // 圣保罗时区计算逻辑
+            // 圣保罗时间
             todaySales() {
-                // 获取圣保罗当前的日期字符串 YYYY-MM-DD
                 const spDate = new Date().toLocaleDateString('zh-CN', { timeZone: 'America/Sao_Paulo' }).split('/').join('-');
-                // 注意：这里简单匹配日期字符串，严谨做法需要对每个订单转时区对比
                 return this.orders.filter(o => o.status === 'completed' && this.formatDate(o.created_at).includes(spDate)).reduce((sum, o) => sum + o.total_price, 0);
             },
             todayItems() {
-                 // 统计今日圣保罗时间内的销售件数
                  const spDate = new Date().toLocaleDateString('zh-CN', { timeZone: 'America/Sao_Paulo' }).split('/').join('-');
-                 return this.orders
+                 return this.orders.filter(o => o.status === 'completed' && this.formatDate(o.created_at).includes(spDate)).reduce((sum, o) => sum + o.total_quantity, 0);
+            },
+            // === 新增：商品销售统计计算属性 ===
+            productSalesStats() {
+                const spDate = new Date().toLocaleDateString('zh-CN', { timeZone: 'America/Sao_Paulo' }).split('/').join('-');
+                // 1. 获取今日完成的订单ID
+                const todayOrderIds = new Set(this.orders
                     .filter(o => o.status === 'completed' && this.formatDate(o.created_at).includes(spDate))
-                    .reduce((sum, o) => sum + o.total_quantity, 0);
+                    .map(o => o.id));
+
+                // 2. 统计商品数量
+                const stats = {};
+                this.orderItems.forEach(item => {
+                    if (todayOrderIds.has(item.order_id)) {
+                        // 以条码为key聚合
+                        if (!stats[item.barcode]) {
+                            stats[item.barcode] = { name: item.product_name, barcode: item.barcode, qty: 0 };
+                        }
+                        stats[item.barcode].qty += item.quantity;
+                    }
+                });
+
+                // 3. 转数组并排序 (销量高 -> 低)
+                return Object.values(stats).sort((a, b) => b.qty - a.qty);
             }
         },
         async mounted() {
@@ -495,7 +518,6 @@
                 this.currentTab = tab;
             },
 
-            // === 业务逻辑 ===
             loadLocalData() {
                 this.products = JSON.parse(localStorage.getItem('products') || '[]');
                 this.orders = JSON.parse(localStorage.getItem('orders') || '[]');
@@ -503,10 +525,18 @@
             },
             async fetchData() {
                 if (!this.isOnline) return;
+                // 1. 获取商品
                 const { data: p } = await this.supabase.from('products').select('*');
                 if (p) { this.products = p; localStorage.setItem('products', JSON.stringify(p)); }
-                const { data: o } = await this.supabase.from('orders').select('*').limit(50);
+                
+                // 2. 获取订单 (最近50单)
+                const { data: o } = await this.supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(50);
                 if (o) { this.orders = o; localStorage.setItem('orders', JSON.stringify(o)); }
+
+                // 3. 核心修复：获取订单明细 (用于统计商品销量)
+                // 在真实场景推荐用关联查询，这里为了保持SQL不变，拉取最新的明细
+                const { data: oi } = await this.supabase.from('order_items').select('*').limit(500);
+                if (oi) { this.orderItems = oi; localStorage.setItem('orderItems', JSON.stringify(oi)); }
             },
             handleBarcodeEnter() {
                 if (!this.entryForm.barcode) return;
@@ -561,7 +591,11 @@
                     unit_price: i.unit_price, quantity: i.quantity, subtotal: i.unit_price * i.quantity
                 }));
                 this.orders.unshift(order);
+                this.orderItems.push(...items); // 本地立即更新统计
+                
                 localStorage.setItem('orders', JSON.stringify(this.orders));
+                localStorage.setItem('orderItems', JSON.stringify(this.orderItems));
+                
                 this.addToSyncQueue('orders', 'insert', order);
                 this.addToSyncQueue('order_items', 'insert', items);
                 this.cart = [];
@@ -574,9 +608,7 @@
                 this.addToSyncQueue('orders', 'update', { id: order.id, status: 'void' });
             },
             
-            // 管理功能
             editProduct(p) { this.editingProduct = JSON.parse(JSON.stringify(p)); },
-            
             async updateProduct() {
                 const idx = this.products.findIndex(p => p.id === this.editingProduct.id);
                 if (idx !== -1) this.products[idx] = this.editingProduct;
@@ -585,28 +617,15 @@
                 this.addToSyncQueue('products', 'update', { id, ...updates });
                 this.editingProduct = null;
             },
-            
-            // === 新增：删除功能 ===
             async deleteProduct() {
-                if(!confirm('⚠️ 警告：确定要彻底删除此商品吗？\n\n如果该商品已有销售记录，删除可能会失败。建议改为“暂停销售”。')) return;
-                
+                if(!confirm('⚠️ 警告：确定要彻底删除此商品吗？')) return;
                 const idToDelete = this.editingProduct.id;
-                
-                // 1. 尝试本地删除
                 this.products = this.products.filter(p => p.id !== idToDelete);
                 localStorage.setItem('products', JSON.stringify(this.products));
-                
-                // 2. 远程删除 (直接执行，不走同步队列，以便立即知道FK错误)
                 if (this.isOnline) {
                     const { error } = await this.supabase.from('products').delete().eq('id', idToDelete);
-                    if (error) {
-                        alert('删除失败：该商品可能已有订单关联。已自动恢复为“停用”状态。');
-                        // 恢复
-                        this.fetchData(); 
-                    }
-                } else {
-                    alert('离线模式无法彻底删除，请联网后操作。');
-                }
+                    if (error) { alert('删除失败：该商品可能已有订单关联。'); this.fetchData(); }
+                } else { alert('离线模式无法彻底删除，请联网后操作。'); }
                 this.editingProduct = null;
             },
 
@@ -633,11 +652,10 @@
                 r.readAsBinaryString(f);
             },
             
-            // === 核心：圣保罗时间格式化 ===
             formatDate(str) { 
                 if(!str) return '';
                 return new Date(str).toLocaleString('zh-CN', {
-                    timeZone: 'America/Sao_Paulo', // 强制圣保罗时区
+                    timeZone: 'America/Sao_Paulo', 
                     month:'numeric', day:'numeric', hour:'numeric', minute:'numeric', hour12: false
                 }); 
             },
