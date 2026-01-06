@@ -655,13 +655,14 @@
             // 🚀 [核心修复] 确认并继续录入 (解决黑屏)
             // -----------------------------------------------------------
             async confirmAndContinueScan() {
-                // 1. 保存
-                this.saveProduct();
+                // 1. 尝试保存，如果失败（没填条码）则停止
+                const success = this.saveProduct();
+                if (!success) return; 
                 
                 // 2. 关闭弹窗
                 this.showEntryModal = false;
                 
-                // 3. 强制重置摄像头 DOM
+                // 3. 强制重置摄像头 DOM (防黑屏核心逻辑)
                 this.scanning = false;
                 await this.$nextTick(); // 等待 Vue 销毁 DOM
                 
@@ -675,9 +676,15 @@
             // -----------------------------------------------------------
             // 📝 数据操作逻辑
             // -----------------------------------------------------------
+            // ✅ 保存商品 (修复版：增加了返回值和兼容性ID生成)
             saveProduct() {
-                if (!this.entryForm.barcode) return alert('需输入条码');
+                if (!this.entryForm.barcode) {
+                    alert('必须输入条形码');
+                    return false; // 返回失败
+                }
+                
                 let finalName = this.entryForm.name || this.getNextName();
+                
                 const p = { 
                     barcode: this.entryForm.barcode, 
                     name: finalName, 
@@ -686,7 +693,10 @@
                     retail_price: parseFloat(this.entryForm.retail_price) || 0, 
                     status: 'active' 
                 };
-                const tempId = crypto.randomUUID(); 
+                
+                // ⚠️ 修复：使用 Date.now() 替代 crypto，防止手机端报错
+                const tempId = Date.now().toString() + Math.floor(Math.random() * 1000); 
+                
                 this.products.unshift({ ...p, id: tempId }); 
                 localStorage.setItem('products', JSON.stringify(this.products)); 
                 this.addToSyncQueue('products', 'insert', p);
@@ -694,8 +704,10 @@
                 this.recentProducts.unshift(p); 
                 if (this.recentProducts.length > 20) this.recentProducts.pop();
 
-                // 保存后自动清空表单
+                // 清空表单
                 this.entryForm = { barcode: '', name: '', category: '', wholesale_price: '', retail_price: '' }; 
+                
+                return true; // 返回成功
             },
 
             // 辅助函数
@@ -778,3 +790,4 @@
 </script>
 </body>
 </html>
+
