@@ -1039,12 +1039,37 @@ async mounted() {
 
                 // 🌟 关键：保存后清空表单，以便连续录入
                 this.entryForm = { barcode: '', name: '', category: '', wholesale_price: '', retail_price: '' }; 
-                
+            
                 // PC端自动聚焦回条码框
                 if (!this.isMobile && this.$refs.barcodeInput) {
                     this.$refs.barcodeInput.focus();
                 }
             },
+            
+            // 新增：专门处理“确认并继续”的逻辑，解决黑屏问题
+            async confirmAndContinueScan() {
+                // 1. 保存当前商品
+                this.saveProduct(); 
+                
+                // 2. 关闭弹窗
+                this.showEntryModal = false;
+                
+                // 3. 强制重置扫描状态
+                // 先设为 false 销毁旧实例，nextTick 后再设为 true 重建 DOM
+                this.scanning = false;
+                await this.$nextTick(); 
+                
+                this.scanning = true;
+                await this.$nextTick(); // 等待 DOM (camera div) 渲染完成
+                
+                // 4. 重新启动扫描
+                this.startScanner('entry');
+            },
+
+            // 👆👆👆 粘贴结束 👆👆👆
+
+            // ... (下面是其他函数，比如 saveQuickAdd) ...
+
             
             // 收银台快速新增逻辑
             saveQuickAdd() {
@@ -1188,6 +1213,7 @@ async mounted() {
 </script>
 </body>
 </html>
+
 
 
 
