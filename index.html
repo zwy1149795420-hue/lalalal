@@ -676,11 +676,11 @@
             // -----------------------------------------------------------
             // 📝 数据操作逻辑
             // -----------------------------------------------------------
-            // ✅ 保存商品 (修复版：增加了返回值和兼容性ID生成)
+            // ✅ 保存商品 (修复版：带自动聚焦)
             saveProduct() {
                 if (!this.entryForm.barcode) {
                     alert('必须输入条形码');
-                    return false; // 返回失败
+                    return false;
                 }
                 
                 let finalName = this.entryForm.name || this.getNextName();
@@ -694,7 +694,7 @@
                     status: 'active' 
                 };
                 
-                // ⚠️ 修复：使用 Date.now() 替代 crypto，防止手机端报错
+                // 使用时间戳ID防止报错
                 const tempId = Date.now().toString() + Math.floor(Math.random() * 1000); 
                 
                 this.products.unshift({ ...p, id: tempId }); 
@@ -704,10 +704,15 @@
                 this.recentProducts.unshift(p); 
                 if (this.recentProducts.length > 20) this.recentProducts.pop();
 
-                // 清空表单
+                // 1. 清空表单
                 this.entryForm = { barcode: '', name: '', category: '', wholesale_price: '', retail_price: '' }; 
                 
-                return true; // 返回成功
+                // 2. 🚀 [关键添加] PC端录入后，光标自动回条码框
+                if (!this.isMobile && this.$refs.barcodeInput) {
+                    this.$nextTick(() => this.$refs.barcodeInput.focus());
+                }
+                
+                return true;
             },
 
             // 辅助函数
@@ -790,4 +795,5 @@
 </script>
 </body>
 </html>
+
 
