@@ -16,6 +16,21 @@
         /* 全局样式 */
         body { margin: 0; background-color: #f8fafc; -webkit-tap-highlight-color: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
         
+        /* 摄像头基础样式 (去除了花哨的装饰) */
+        .scan-base {
+            width: 100%; 
+            background-color: #000; 
+            border-radius: 16px; 
+            overflow: hidden; 
+            position: relative;
+        }
+        #reader video, #manage-reader video, #cashier-reader video { 
+            width: 100% !important; 
+            height: 100% !important; 
+            object-fit: cover !important; 
+            border-radius: 16px; 
+        }
+        
         /* 隐藏滚动条 */
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -24,52 +39,6 @@
         .btn-press:active { transform: scale(0.96); opacity: 0.8; transition: transform 0.1s; }
         input:focus, select:focus { outline: none; border-color: #3b82f6; ring: 2px; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
         [v-cloak] { display: none; }
-
-        /* === 📸 扫码框美化 (核心修改) === */
-        .scan-wrapper {
-            position: relative; width: 100%; height: 100%; min-height: 280px;
-            background-color: #000; border-radius: 20px; overflow: hidden;
-        }
-        /* 视频层 */
-        .scan-video-layer { width: 100%; height: 100%; position: absolute; inset: 0; }
-        .scan-video-layer video { 
-            width: 100% !important; height: 100% !important; object-fit: cover !important; 
-        }
-        /* 遮罩层 (周围变暗) */
-        .scan-mask {
-            position: absolute; inset: 0; z-index: 10; pointer-events: none;
-            background: radial-gradient(circle at center, transparent 55%, rgba(0,0,0,0.6) 100%);
-        }
-        /* 取景框 (中间亮框) */
-        .scan-viewfinder {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 220px; height: 220px; z-index: 20; pointer-events: none;
-            border-radius: 12px;
-            box-shadow: 0 0 0 2000px rgba(0,0,0,0.5); /* 超大阴影构建遮罩 */
-        }
-        /* 四角对焦线 */
-        .scan-corner {
-            position: absolute; width: 24px; height: 24px;
-            border: 4px solid #3b82f6; /* Blue-500 */
-            border-radius: 4px;
-        }
-        .scan-tl { top: -2px; left: -2px; border-right: none; border-bottom: none; }
-        .scan-tr { top: -2px; right: -2px; border-left: none; border-bottom: none; }
-        .scan-bl { bottom: -2px; left: -2px; border-right: none; border-top: none; }
-        .scan-br { bottom: -2px; right: -2px; border-left: none; border-top: none; }
-        /* 激光扫描线动画 */
-        .scan-laser {
-            position: absolute; width: 100%; height: 2px;
-            background: linear-gradient(90deg, transparent, #60a5fa, transparent);
-            box-shadow: 0 0 15px rgba(59,130,246,0.8);
-            animation: scan-move 2s infinite ease-in-out;
-        }
-        @keyframes scan-move {
-            0% { top: 10%; opacity: 0; }
-            20% { opacity: 1; }
-            80% { opacity: 1; }
-            100% { top: 90%; opacity: 0; }
-        }
 
         /* 底部导航栏 */
         .nav-blur {
@@ -139,14 +108,8 @@
                             </button>
                         </div>
                         
-                        <div v-show="scanning" class="scan-wrapper shadow-inner">
-                            <div id="cashier-reader" class="scan-video-layer"></div>
-                            <div class="scan-mask"></div> <div class="scan-viewfinder"> <div class="scan-corner scan-tl"></div>
-                                <div class="scan-corner scan-tr"></div>
-                                <div class="scan-corner scan-bl"></div>
-                                <div class="scan-corner scan-br"></div>
-                                <div class="scan-laser"></div>
-                            </div>
+                        <div v-show="scanning" class="scan-base h-[180px] shadow-inner border border-slate-200">
+                            <div id="cashier-reader" class="w-full h-full"></div>
                         </div>
                     </div>
                 </div>
@@ -206,14 +169,8 @@
                     </button>
                 </div>
 
-                <div v-if="scanning && currentTab === 'manage'" class="scan-wrapper shadow-inner h-[250px]">
-                    <div id="manage-reader" class="scan-video-layer"></div>
-                    <div class="scan-mask"></div>
-                    <div class="scan-viewfinder" style="width: 200px; height: 180px;">
-                        <div class="scan-corner scan-tl"></div><div class="scan-corner scan-tr"></div>
-                        <div class="scan-corner scan-bl"></div><div class="scan-corner scan-br"></div>
-                        <div class="scan-laser"></div>
-                    </div>
+                <div v-if="scanning && currentTab === 'manage'" class="scan-base h-[200px] shadow-inner">
+                    <div id="manage-reader" class="w-full h-full"></div>
                 </div>
 
                 <div class="flex gap-2 items-center">
@@ -245,15 +202,9 @@
             </div>
 
             <div v-if="currentTab === 'entry'" class="flex flex-col lg:flex-row gap-4 max-w-5xl mx-auto">
-                <div class="w-full lg:w-1/2 scan-wrapper shadow-lg relative h-[300px] lg:h-[500px]">
-                    <div v-show="scanning" class="scan-video-layer">
-                         <div id="reader" class="scan-video-layer"></div>
-                         <div class="scan-mask"></div>
-                         <div class="scan-viewfinder">
-                            <div class="scan-corner scan-tl"></div><div class="scan-corner scan-tr"></div>
-                            <div class="scan-corner scan-bl"></div><div class="scan-corner scan-br"></div>
-                            <div class="scan-laser"></div>
-                         </div>
+                <div class="w-full lg:w-1/2 scan-base shadow-lg relative h-[250px] lg:h-[500px]">
+                    <div v-show="scanning" class="w-full h-full">
+                         <div id="reader" class="w-full h-full"></div>
                     </div>
                     <div v-if="!scanning" class="absolute inset-0 flex flex-col items-center justify-center text-slate-500 bg-black">
                         <i class="ph-camera-slash text-5xl mb-2"></i><p>摄像头已关闭</p>
