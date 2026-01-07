@@ -19,7 +19,7 @@
         input, textarea { user-select: text; } /* 仅允许输入框选中文本 */
         [v-cloak] { display: none; }
 
-        /* 摄像头容器 - 移动端固定高度，防止黑屏闪烁 */
+        /* 摄像头容器 */
         .scan-base { background-color: #000; border-radius: 12px; overflow: hidden; position: relative; width: 100%; }
         #reader video, #manage-reader video, #cashier-reader video { width: 100% !important; height: 100% !important; object-fit: cover !important; }
 
@@ -170,7 +170,9 @@
                     <div class="flex-1 overflow-y-auto custom-scroll space-y-2 pr-1">
                         <div v-for="p in recentProducts" :key="p.id" class="p-2 border border-slate-100 rounded-lg flex justify-between items-center bg-slate-50 hover:bg-blue-50 transition-colors">
                             <div class="overflow-hidden"><div class="font-bold text-slate-800 text-sm truncate">{{ p.name }}</div><div class="text-[10px] text-slate-400 font-mono">{{ p.barcode }}</div></div>
-                            <div class="text-right shrink-0"><div class="text-sm text-blue-600 font-bold">R$ {{ p.retail_price }}</div></div>
+                            <div class="text-right shrink-0"><div class="text-sm text-blue-600 font-bold">R$ {{ p.retail_price }}</div>
+                            <div class="text-[10px] text-slate-400">批: {{ p.wholesale_price }}</div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -197,7 +199,7 @@
                         <div v-if="p.status==='disabled'" class="absolute right-0 top-0 bg-red-100 text-red-600 text-[10px] px-2 rounded-bl font-bold">已暂停</div>
                         <h3 class="font-bold text-sm text-slate-800 truncate">{{ p.name }}</h3>
                         <p class="text-[10px] text-slate-400 font-mono mb-2">{{ p.barcode }}</p>
-                        <div class="flex justify-between border-t border-slate-50 pt-1.5"><span class="text-[10px] text-slate-400">进:{{ p.wholesale_price }}</span><span class="text-xs font-bold text-blue-600">卖:{{ p.retail_price }}</span></div>
+                        <div class="flex justify-between border-t border-slate-50 pt-1.5"><span class="text-[10px] text-slate-400">批:{{ p.wholesale_price }}</span><span class="text-xs font-bold text-blue-600">零:{{ p.retail_price }}</span></div>
                     </div>
                 </div>
             </div>
@@ -235,8 +237,8 @@
                 <input v-model="entryForm.name" class="w-full p-3 bg-slate-50 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-100" placeholder="商品名称">
                 <input v-model="entryForm.category" class="w-full p-3 bg-slate-50 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-100" placeholder="分类">
                 <div class="flex gap-3">
-                    <input v-model="entryForm.wholesale_price" type="number" class="w-full p-3 bg-slate-50 rounded-xl font-bold text-sm outline-none" placeholder="进价">
-                    <input v-model="entryForm.retail_price" type="number" class="w-full p-3 bg-blue-50 text-blue-600 rounded-xl font-bold text-sm outline-none" placeholder="售价">
+                    <input v-model="entryForm.wholesale_price" type="number" class="w-full p-3 bg-slate-50 rounded-xl font-bold text-sm outline-none" placeholder="批发价">
+                    <input v-model="entryForm.retail_price" type="number" class="w-full p-3 bg-blue-50 text-blue-600 rounded-xl font-bold text-sm outline-none" placeholder="零售价">
                 </div>
             </div>
             <div class="grid grid-cols-2 gap-3 mt-6">
@@ -263,16 +265,23 @@
         </div>
     </div>
     
-    <div v-if="editingProduct" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-sm rounded-2xl p-5 shadow-xl animate-fade-in-up">
-            <h3 class="font-bold mb-4">编辑商品</h3>
-            <div class="space-y-3">
-                <input v-model="editingProduct.name" class="w-full p-2 border rounded font-bold text-sm">
-                <div class="flex gap-2"><input v-model="editingProduct.wholesale_price" type="number" class="w-full p-2 border rounded text-sm"><input v-model="editingProduct.retail_price" type="number" class="w-full p-2 border rounded text-sm text-blue-600 font-bold"></div>
-                <select v-model="editingProduct.status" class="w-full p-2 border rounded text-sm font-bold"><option value="active">正常</option><option value="disabled">暂停</option></select>
+    <div v-if="manageProductModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-2xl p-5 shadow-xl animate-fade-in-up relative">
+            <button @click="manageProductModal=null" class="absolute right-3 top-3 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200"><i class="ph-x text-lg"></i></button>
+            <h3 class="font-bold mb-4 text-lg">商品详情</h3>
+            <div class="space-y-4">
+                <div><label class="text-xs text-slate-400 font-bold">条码</label><div class="font-mono bg-slate-50 p-2 rounded text-sm">{{ manageProductModal.barcode }}</div></div>
+                <div><label class="text-xs text-slate-400 font-bold">名称</label><input v-model="manageProductModal.name" class="w-full p-2 border rounded font-bold text-sm"></div>
+                <div class="flex gap-3">
+                    <div class="flex-1"><label class="text-xs text-slate-400 font-bold">批发价</label><input v-model="manageProductModal.wholesale_price" type="number" class="w-full p-2 border rounded text-sm"></div>
+                    <div class="flex-1"><label class="text-xs text-blue-500 font-bold">零售价</label><input v-model="manageProductModal.retail_price" type="number" class="w-full p-2 border rounded text-sm text-blue-600 font-bold"></div>
+                </div>
+                <div><label class="text-xs text-slate-400 font-bold">状态</label><select v-model="manageProductModal.status" class="w-full p-2 border rounded text-sm font-bold"><option value="active">正常</option><option value="disabled">暂停</option></select></div>
             </div>
-            <div class="flex gap-2 mt-4"><button @click="deleteProduct" class="flex-1 py-2 bg-red-50 text-red-500 rounded font-bold text-sm">删除</button><button @click="updateProduct" class="flex-1 py-2 bg-slate-900 text-white rounded font-bold text-sm">保存</button></div>
-            <button @click="editingProduct=null" class="w-full mt-2 text-xs text-slate-400 font-bold py-2">取消</button>
+            <div class="flex gap-2 mt-6">
+                <button @click="deleteProduct(manageProductModal)" class="flex-1 py-3 bg-red-50 text-red-500 rounded-xl font-bold text-sm">删除</button>
+                <button @click="updateProduct(manageProductModal)" class="flex-1 py-3 bg-slate-900 text-white rounded-xl font-bold text-sm shadow-lg">保存修改</button>
+            </div>
         </div>
     </div>
 
@@ -287,6 +296,7 @@
     </div>
 
 </div>
+
 <script>
     const { createClient } = supabase;
     // ⚠️ 填写配置
@@ -300,7 +310,7 @@
                 currentTab: 'cashier',
                 products: [], orders: [], orderItems: [],
                 entryForm: { barcode: '', name: '', category: '', wholesale_price: '', retail_price: '' },
-                quickAddForm: { barcode: '', price: '' }, editingProduct: null,
+                quickAddForm: { barcode: '', price: '' }, editingProduct: null, manageProductModal: null, // 新增：商品管理弹窗数据
                 scanning: false, html5QrCode: null, lastScanTime: 0,
                 searchText: '', cashierSearch: '', productFilterStatus: 'active', orderFilterType: 'completed',
                 showQuickAdd: false, showEntryModal: false, viewingOrder: null,
@@ -314,6 +324,7 @@
             filteredProducts() {
                 let list = this.products;
                 if (this.productFilterStatus !== 'all') list = list.filter(p => p.status === this.productFilterStatus);
+                // Bug2 & 3 修复: 只有在手动搜索时才过滤，扫码走弹窗逻辑，不再过滤列表
                 if (this.searchText) { const low = this.searchText.toLowerCase(); list = list.filter(p => p.name?.toLowerCase().includes(low) || p.barcode.includes(low)); }
                 return list;
             },
@@ -372,15 +383,30 @@
                 catch (e) { this.scanning = false; alert("摄像头启动失败"); }
             },
             async stopScanner() { if(this.html5QrCode){try{await this.html5QrCode.stop();this.html5QrCode.clear();}catch(e){}} this.html5QrCode=null; this.scanning=false; },
+            
             onScanSuccess(txt, tab) {
                 if (Date.now() - this.lastScanTime < 2000) return; this.lastScanTime = Date.now();
                 this.playBeep();
-                if (tab === 'entry') { this.entryForm.barcode = txt; if(this.isMobile){this.stopScanner();this.showEntryModal=true;}else{this.handleBarcodeEnter();} }
-                else if (tab === 'cashier') { this.cashierSearch = txt; this.addToCartByInput(); }
-                else if (tab === 'manage') { this.searchText = txt; }
+                
+                if (tab === 'entry') { 
+                    this.entryForm.barcode = txt; 
+                    if(this.isMobile){this.stopScanner();this.showEntryModal=true;}else{this.handleBarcodeEnter();} 
+                }
+                else if (tab === 'cashier') { 
+                    this.cashierSearch = txt; this.addToCartByInput(); 
+                }
+                else if (tab === 'manage') { 
+                    // Bug2 & 3 修复: 商品管理页扫码 -> 查找商品 -> 弹出详情小窗
+                    const p = this.products.find(x => x.barcode === txt);
+                    if (p) {
+                        this.manageProductModal = JSON.parse(JSON.stringify(p)); // 复制对象以供编辑
+                    } else {
+                        alert("未找到该商品");
+                    }
+                }
             },
 
-            // --- 核心修复：自动聚焦 ---
+            // --- 自动聚焦 ---
             async switchTab(tab) {
                 if (this.scanning) await this.stopScanner();
                 this.currentTab = tab;
@@ -399,7 +425,7 @@
             saveProduct() {
                 if (!this.entryForm.barcode) { alert('缺条码'); return false; }
                 const p = { 
-                    id: Date.now().toString() + Math.floor(Math.random()*1000), // 🚀 兼容ID
+                    id: Date.now().toString() + Math.floor(Math.random()*1000),
                     barcode: this.entryForm.barcode, 
                     name: this.entryForm.name || `未命名${this.products.length+1}`, 
                     category: this.entryForm.category || '默认', 
@@ -411,9 +437,10 @@
                 this.addToSyncQueue('products', 'insert', p);
                 this.recentProducts.unshift(p);
                 this.entryForm = { barcode: '', name: '', category: '', wholesale_price: '', retail_price: '' };
-                this.autoFocusPC('entry'); // 录入后回焦
+                this.autoFocusPC('entry');
                 return true;
             },
+            
             addToCartByInput() {
                 const term = this.cashierSearch.trim(); if (!term) return;
                 let p = this.products.find(x => (x.barcode === term || x.name === term) && x.status === 'active');
@@ -427,13 +454,26 @@
                     this.$nextTick(()=>this.$refs.quickPriceInput?.focus());
                 }
             },
+            
+            // Bug4 修复: 快速入库价格匹配当前模式
             saveQuickAdd() {
                 if (!this.quickAddForm.price) return;
-                const p = { id: Date.now().toString(), barcode: this.quickAddForm.barcode, name: `新商品${this.products.length+1}`, wholesale_price: parseFloat(this.quickAddForm.price), retail_price: parseFloat(this.quickAddForm.price), status: 'active', category: '默认' };
+                const priceVal = parseFloat(this.quickAddForm.price);
+                const p = { 
+                    id: Date.now().toString(), 
+                    barcode: this.quickAddForm.barcode, 
+                    name: `新商品${this.products.length+1}`, 
+                    // 如果当前是零售模式，则零售价=输入值，批发价=0；反之亦然
+                    wholesale_price: this.priceMode === 'wholesale' ? priceVal : 0, 
+                    retail_price: this.priceMode === 'retail' ? priceVal : 0, 
+                    status: 'active', 
+                    category: '默认' 
+                };
                 this.products.unshift(p); this.addToSyncQueue('products', 'insert', p);
-                this.cart.push({ product_id: p.id, name: p.name, barcode: p.barcode, unit_price: p.retail_price, quantity: 1 });
+                this.cart.push({ product_id: p.id, name: p.name, barcode: p.barcode, unit_price: priceVal, quantity: 1 });
                 this.showQuickAdd = false; this.cashierSearch = '';
             },
+            
             checkoutDirectly() {
                 if (!confirm(`确认收款 R$ ${this.cartTotalPrice}?`)) return;
                 const order = { id: Date.now().toString(), total_price: parseFloat(this.cartTotalPrice), total_quantity: this.cartTotalQty, price_type: this.priceMode, payment_method: 'cash', status: 'completed', created_at: new Date().toISOString() };
@@ -465,12 +505,35 @@
             },
             
             // --- 辅助 ---
-            switchPriceMode(m) { this.priceMode = m; this.cart.forEach(i => { const p = this.products.find(x => x.id === i.product_id); if(p) i.unit_price = m==='retail'?p.retail_price:p.wholesale_price; }); },
+            // Bug5 修复: 模式切换时，更新购物车中所有商品的单价
+            switchPriceMode(m) { 
+                this.priceMode = m; 
+                this.cart.forEach(i => { 
+                    const p = this.products.find(x => x.id === i.product_id); 
+                    if(p) i.unit_price = m === 'retail' ? p.retail_price : p.wholesale_price; 
+                }); 
+            },
             removeFromCart(i) { this.cart.splice(i, 1); }, clearCart() { if(confirm('清空?')) this.cart = []; },
             voidOrder(o) { if(!confirm('作废?')) return; o.status = 'void'; localStorage.setItem('orders', JSON.stringify(this.orders)); this.addToSyncQueue('orders', 'update', { id: o.id, status: 'void' }); },
-            editProduct(p) { this.editingProduct = JSON.parse(JSON.stringify(p)); },
-            async updateProduct() { const idx = this.products.findIndex(p => p.id === this.editingProduct.id); if(idx!==-1) this.products[idx] = this.editingProduct; localStorage.setItem('products', JSON.stringify(this.products)); this.addToSyncQueue('products', 'update', this.editingProduct); this.editingProduct = null; },
-            async deleteProduct() { if(!confirm('删除?')) return; const id = this.editingProduct.id; this.products = this.products.filter(p => p.id !== id); localStorage.setItem('products', JSON.stringify(this.products)); if(this.isOnline) await this.supabase.from('products').delete().eq('id', id); else this.addToSyncQueue('products', 'delete', {id}); this.editingProduct=null; },
+            
+            // 商品管理编辑逻辑 (统一使用 manageProductModal 或 editingProduct 均可，此处复用逻辑)
+            editProduct(p) { this.manageProductModal = JSON.parse(JSON.stringify(p)); }, // 列表点击也走弹窗逻辑
+            async updateProduct(p) { 
+                const idx = this.products.findIndex(x => x.id === p.id); 
+                if(idx!==-1) this.products[idx] = p; 
+                localStorage.setItem('products', JSON.stringify(this.products)); 
+                this.addToSyncQueue('products', 'update', p); 
+                this.manageProductModal = null; 
+            },
+            async deleteProduct(p) { 
+                if(!confirm('删除?')) return; 
+                const id = p.id; 
+                this.products = this.products.filter(x => x.id !== id); 
+                localStorage.setItem('products', JSON.stringify(this.products)); 
+                if(this.isOnline) await this.supabase.from('products').delete().eq('id', id); else this.addToSyncQueue('products', 'delete', {id}); 
+                this.manageProductModal = null; 
+            },
+            
             exportExcel() { const ws=XLSX.utils.json_to_sheet(this.products); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Products"); XLSX.writeFile(wb,"Products.xlsx"); },
             importExcel(e) { 
                 const f=e.target.files[0]; const r=new FileReader(); 
