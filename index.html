@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>极简收银 Pro (终极完善版)</title>
+    <title>极简收银 Pro (PC体验修复版)</title>
     
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -148,25 +148,25 @@
                         </div>
                         <div>
                             <label class="text-[10px] font-bold text-slate-400 uppercase">名称</label>
-                            <input v-model="entryForm.name" type="text" class="w-full p-2.5 bg-slate-50 rounded-lg font-bold outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all" placeholder="商品名称">
+                            <input ref="nameInput" v-model="entryForm.name" @keyup.enter="$refs.catInput.focus()" type="text" class="w-full p-2.5 bg-slate-50 rounded-lg font-bold outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all" placeholder="商品名称">
                         </div>
                         <div>
                             <label class="text-[10px] font-bold text-slate-400 uppercase">分类</label>
-                            <input list="cat-list" v-model="entryForm.category" type="text" class="w-full p-2.5 bg-slate-50 rounded-lg font-bold outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all" placeholder="分类">
+                            <input ref="catInput" list="cat-list" v-model="entryForm.category" @keyup.enter="$refs.wholesaleInput.focus()" type="text" class="w-full p-2.5 bg-slate-50 rounded-lg font-bold outline-none focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all" placeholder="分类">
                             <datalist id="cat-list"><option v-for="c in allCategories" :value="c"></option></datalist>
                         </div>
                         <div class="grid grid-cols-1 gap-3 pt-2 border-t border-slate-50">
                             <div>
                                 <label class="text-[10px] font-bold text-slate-400 uppercase">批发价</label>
-                                <div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">R$</span><input v-model="entryForm.wholesale_price" type="number" class="w-full pl-8 p-2.5 bg-slate-50 rounded-lg font-bold outline-none focus:bg-white focus:ring-2 focus:ring-blue-100"></div>
+                                <div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">R$</span><input ref="wholesaleInput" v-model="entryForm.wholesale_price" @keyup.enter="$refs.retailInput.focus()" type="number" class="w-full pl-8 p-2.5 bg-slate-50 rounded-lg font-bold outline-none focus:bg-white focus:ring-2 focus:ring-blue-100"></div>
                             </div>
                             <div>
                                 <label class="text-[10px] font-bold text-blue-500 uppercase">零售价</label>
-                                <div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500 font-bold text-xs">R$</span><input v-model="entryForm.retail_price" type="number" class="w-full pl-8 p-2.5 bg-blue-50 text-blue-600 rounded-lg font-bold outline-none focus:bg-white focus:ring-2 focus:ring-blue-200"></div>
+                                <div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500 font-bold text-xs">R$</span><input ref="retailInput" v-model="entryForm.retail_price" @keyup.enter="saveProduct" type="number" class="w-full pl-8 p-2.5 bg-blue-50 text-blue-600 rounded-lg font-bold outline-none focus:bg-white focus:ring-2 focus:ring-blue-200"></div>
                             </div>
                         </div>
                     </div>
-                    <button @click="saveProduct" class="w-full py-3 bg-slate-900 text-white rounded-xl font-bold mt-4 shadow-lg btn-press flex items-center justify-center gap-2"><i class="ph-check-circle"></i> 确认添加</button>
+                    <button @click="saveProduct" class="w-full py-3 bg-slate-900 text-white rounded-xl font-bold mt-4 shadow-lg btn-press flex items-center justify-center gap-2"><i class="ph-check-circle"></i> 确认添加 (Enter)</button>
                 </div>
 
                 <div class="flex-1 bg-white p-4 rounded-2xl shadow-sm border border-slate-200/60 flex flex-col h-full overflow-hidden">
@@ -190,7 +190,7 @@
                 <div class="flex flex-col md:flex-row gap-2">
                     <div class="flex gap-2 bg-white p-2 rounded-xl border border-slate-200/60 flex-1 h-[54px] items-center">
                         <i class="ph-magnifying-glass text-slate-400 self-center ml-2"></i>
-                        <input ref="manageInput" v-model="searchText" type="text" placeholder="搜索名称或条码..." class="flex-1 bg-transparent text-sm font-bold outline-none h-full">
+                        <input ref="manageInput" v-model="searchText" @keyup.enter="handleManageSearch" type="text" placeholder="搜索或扫码..." class="flex-1 bg-transparent text-sm font-bold outline-none h-full">
                         <button v-if="isMobile" @click="toggleScanner('manage')" :class="scanning?'text-blue-600 bg-blue-50':'text-slate-500'" class="p-2 rounded active:bg-slate-100 transition-colors">
                             <i class="ph-qr-code text-lg"></i>
                         </button>
@@ -236,11 +236,11 @@
                         </div>
                     </div>
                     <div v-if="filteredProducts.length===0" class="col-span-full text-center py-10 text-slate-400 text-xs">
-                        未找到相关商品
+                        未找到相关商品<br>
+                        <span class="text-blue-500 cursor-pointer" @click="openEntryModal(searchText)">点击或回车新增</span>
                     </div>
                 </div>
             </div>
-
             <div v-if="currentTab === 'orders'" class="space-y-4 max-w-3xl mx-auto">
                 <div class="bg-slate-900 p-5 rounded-2xl text-white shadow-lg relative overflow-hidden">
                     <div class="absolute -right-5 -top-5 w-24 h-24 bg-blue-500/20 rounded-full blur-xl"></div>
@@ -256,14 +256,14 @@
                         </div>
                     </div>
                     <div class="max-h-[400px] overflow-y-auto custom-scroll divide-y divide-slate-50">
-                        <div v-for="o in filteredOrdersList" :key="o.id" @click="viewOrderDetails(o)" class="p-3 flex justify-between items-center active:bg-slate-50 transition-colors">
+                        <div v-for="o in filteredOrdersList" :key="o.id" @click="viewOrderDetails(o)" class="p-3 flex justify-between items-center active:bg-slate-50 transition-colors cursor-pointer">
                             <div>
                                 <div class="font-bold text-sm">R$ {{ o.total_price }}</div>
                                 <div class="text-[10px] text-slate-400 font-mono">{{ formatDate(o.created_at) }}</div>
                             </div>
                             <div class="text-right">
                                 <div class="text-xs font-bold text-slate-500">{{ o.total_quantity }}件</div>
-                                <button v-if="o.status==='completed'" @click.stop="voidOrder(o)" class="text-[10px] text-red-400 border border-red-100 px-1 rounded mt-1">作废</button>
+                                <button v-if="o.status==='completed'" @click.stop="voidOrder(o)" class="text-[10px] text-red-400 border border-red-100 px-1 rounded mt-1 hover:bg-red-50">作废</button>
                             </div>
                         </div>
                     </div>
@@ -278,26 +278,27 @@
             <div @click="switchTab('orders')" :class="{'text-blue-600':currentTab==='orders'}" class="flex flex-col items-center w-1/4 pt-2 btn-press"><i class="ph-chart-bar text-2xl mb-1"></i><span class="text-[10px] font-bold">报表</span></div>
         </nav>
     </main>
+
     <div v-if="showEntryModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-fade-in-up">
             <div class="text-center mb-4">
                 <i class="ph-check-circle text-green-500 text-4xl"></i>
-                <h3 class="font-bold text-lg mt-2">扫码成功</h3>
+                <h3 class="font-bold text-lg mt-2">商品录入</h3>
                 <p class="text-xs font-mono bg-slate-100 inline-block px-2 py-1 rounded mt-1">{{ entryForm.barcode }}</p>
             </div>
             <div class="space-y-3">
-                <input v-model="entryForm.name" class="w-full p-3 bg-slate-50 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-100" placeholder="商品名称">
-                <input list="modal-cat-list" v-model="entryForm.category" class="w-full p-3 bg-slate-50 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-100" placeholder="分类 (可输入新分类)">
+                <input ref="modalName" v-model="entryForm.name" @keyup.enter="$refs.modalCat.focus()" class="w-full p-3 bg-slate-50 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-100" placeholder="商品名称">
+                <input ref="modalCat" list="modal-cat-list" v-model="entryForm.category" @keyup.enter="$refs.modalWholesale.focus()" class="w-full p-3 bg-slate-50 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-100" placeholder="分类">
                 <datalist id="modal-cat-list"><option v-for="c in allCategories" :value="c"></option></datalist>
                 
                 <div class="flex gap-3">
-                    <input v-model="entryForm.wholesale_price" type="number" class="w-full p-3 bg-slate-50 rounded-xl font-bold text-sm outline-none" placeholder="批发价">
-                    <input v-model="entryForm.retail_price" type="number" class="w-full p-3 bg-blue-50 text-blue-600 rounded-xl font-bold text-sm outline-none" placeholder="零售价">
+                    <input ref="modalWholesale" v-model="entryForm.wholesale_price" @keyup.enter="$refs.modalRetail.focus()" type="number" class="w-full p-3 bg-slate-50 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-100" placeholder="批发价">
+                    <input ref="modalRetail" v-model="entryForm.retail_price" @keyup.enter="confirmAndContinueScan" type="number" class="w-full p-3 bg-blue-50 text-blue-600 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-200" placeholder="零售价">
                 </div>
             </div>
             <div class="grid grid-cols-2 gap-3 mt-6">
-                 <button @click="showEntryModal=false; if(currentTab==='entry') { scanning=true; startScanner('entry'); }" class="py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm">放弃</button>
-                 <button @click="confirmAndContinueScan" class="py-3 bg-slate-900 text-white rounded-xl font-bold text-sm shadow-lg btn-press">确认并添加</button>
+                 <button @click="closeEntryModal" class="py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200 transition-colors">放弃</button>
+                 <button @click="confirmAndContinueScan" class="py-3 bg-slate-900 text-white rounded-xl font-bold text-sm shadow-lg btn-press hover:bg-slate-800 transition-colors">确认 (Enter)</button>
             </div>
         </div>
     </div>
@@ -312,37 +313,37 @@
                 <label class="text-[10px] font-bold text-slate-400 uppercase block mb-2 text-center">输入{{ priceMode === 'retail' ? '零售' : '批发' }}单价</label>
                 <div class="relative">
                     <span class="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xl">R$</span>
-                    <input ref="quickPriceInput" v-model="quickAddForm.price" type="number" class="w-full p-4 pl-14 bg-slate-50 rounded-xl font-black text-3xl text-center outline-none focus:ring-2 focus:ring-blue-500">
+                    <input ref="quickPriceInput" v-model="quickAddForm.price" @keyup.enter="saveQuickAdd" type="number" class="w-full p-4 pl-14 bg-slate-50 rounded-xl font-black text-3xl text-center outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
             </div>
             <div class="grid grid-cols-2 gap-3">
-                <button @click="showQuickAdd=false" class="py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm">取消</button>
-                <button @click="saveQuickAdd" class="py-3 bg-slate-900 text-white rounded-xl font-bold text-sm shadow-lg btn-press">确认</button>
+                <button @click="showQuickAdd=false" class="py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200">取消</button>
+                <button @click="saveQuickAdd" class="py-3 bg-slate-900 text-white rounded-xl font-bold text-sm shadow-lg btn-press hover:bg-slate-800">确认 (Enter)</button>
             </div>
         </div>
     </div>
     
     <div v-if="manageProductModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div class="bg-white w-full max-w-sm rounded-2xl p-5 shadow-xl animate-fade-in-up relative">
-            <button @click="manageProductModal=null" class="absolute right-3 top-3 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200"><i class="ph-x text-lg"></i></button>
+            <button @click="manageProductModal=null" class="absolute right-3 top-3 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 transition-colors"><i class="ph-x text-lg"></i></button>
             <h3 class="font-bold mb-4 text-lg">商品详情</h3>
             <div class="space-y-4">
                 <div><label class="text-xs text-slate-400 font-bold">条码</label><div class="font-mono bg-slate-50 p-2 rounded text-sm select-all">{{ manageProductModal.barcode }}</div></div>
-                <div><label class="text-xs text-slate-400 font-bold">名称</label><input v-model="manageProductModal.name" class="w-full p-2 border rounded font-bold text-sm"></div>
+                <div><label class="text-xs text-slate-400 font-bold">名称</label><input ref="editName" v-model="manageProductModal.name" @keyup.enter="$refs.editCat.focus()" class="w-full p-2 border rounded font-bold text-sm focus:ring-2 focus:ring-blue-100 outline-none"></div>
                 <div>
                     <label class="text-xs text-slate-400 font-bold">分类</label>
-                    <input list="edit-cat-list" v-model="manageProductModal.category" class="w-full p-2 border rounded font-bold text-sm" placeholder="输入或选择分类">
+                    <input ref="editCat" list="edit-cat-list" v-model="manageProductModal.category" @keyup.enter="$refs.editWholesale.focus()" class="w-full p-2 border rounded font-bold text-sm focus:ring-2 focus:ring-blue-100 outline-none" placeholder="输入或选择分类">
                     <datalist id="edit-cat-list"><option v-for="c in allCategories" :value="c"></option></datalist>
                 </div>
                 <div class="flex gap-3">
-                    <div class="flex-1"><label class="text-xs text-slate-400 font-bold">批发价</label><input v-model="manageProductModal.wholesale_price" type="number" class="w-full p-2 border rounded text-sm"></div>
-                    <div class="flex-1"><label class="text-xs text-blue-500 font-bold">零售价</label><input v-model="manageProductModal.retail_price" type="number" class="w-full p-2 border rounded text-sm text-blue-600 font-bold"></div>
+                    <div class="flex-1"><label class="text-xs text-slate-400 font-bold">批发价</label><input ref="editWholesale" v-model="manageProductModal.wholesale_price" @keyup.enter="$refs.editRetail.focus()" type="number" class="w-full p-2 border rounded text-sm focus:ring-2 focus:ring-blue-100 outline-none"></div>
+                    <div class="flex-1"><label class="text-xs text-blue-500 font-bold">零售价</label><input ref="editRetail" v-model="manageProductModal.retail_price" @keyup.enter="updateProduct(manageProductModal)" type="number" class="w-full p-2 border rounded text-sm text-blue-600 font-bold focus:ring-2 focus:ring-blue-200 outline-none"></div>
                 </div>
-                <div><label class="text-xs text-slate-400 font-bold">状态</label><select v-model="manageProductModal.status" class="w-full p-2 border rounded text-sm font-bold"><option value="active">正常</option><option value="disabled">暂停</option></select></div>
+                <div><label class="text-xs text-slate-400 font-bold">状态</label><select v-model="manageProductModal.status" class="w-full p-2 border rounded text-sm font-bold outline-none"><option value="active">正常</option><option value="disabled">暂停</option></select></div>
             </div>
             <div class="flex gap-2 mt-6">
-                <button @click="deleteProduct(manageProductModal)" class="flex-1 py-3 bg-red-50 text-red-500 rounded-xl font-bold text-sm">删除</button>
-                <button @click="updateProduct(manageProductModal)" class="flex-1 py-3 bg-slate-900 text-white rounded-xl font-bold text-sm shadow-lg">保存修改</button>
+                <button @click="deleteProduct(manageProductModal)" class="flex-1 py-3 bg-red-50 text-red-500 rounded-xl font-bold text-sm hover:bg-red-100 transition-colors">删除</button>
+                <button @click="updateProduct(manageProductModal)" class="flex-1 py-3 bg-slate-900 text-white rounded-xl font-bold text-sm shadow-lg hover:bg-slate-800 transition-colors">保存 (Enter)</button>
             </div>
         </div>
     </div>
@@ -361,7 +362,6 @@
     </div>
 
 </div>
-
 <script>
     const { createClient } = supabase;
     
@@ -380,7 +380,7 @@
                 manageProductModal: null, 
                 scanning: false, html5QrCode: null, lastScanTime: 0,
                 searchText: '', cashierSearch: '', productFilterStatus: 'active', orderFilterType: 'completed',
-                productFilterCategory: 'all', // 🚀 新增：分类筛选变量
+                productFilterCategory: 'all',
                 showQuickAdd: false, showEntryModal: false, viewingOrder: null,
                 priceMode: 'retail', cart: [], recentProducts: [],
                 syncQueue: JSON.parse(localStorage.getItem('syncQueue') || '[]')
@@ -390,16 +390,21 @@
             currentTitle() { return { entry: '商品录入', manage: '商品管理', cashier: '前台收银', orders: '销售报表' }[this.currentTab]; },
             allCategories() { return Array.from(new Set(this.products.map(p => p.category || '默认'))).sort(); },
             filteredProducts() {
+                // Bug 4 优化：仅在管理页时计算，减少后台开销
+                if (this.currentTab !== 'manage') return [];
+                
                 let list = this.products;
-                // 🚀 状态筛选
                 if (this.productFilterStatus !== 'all') list = list.filter(p => p.status === this.productFilterStatus);
-                // 🚀 分类筛选
                 if (this.productFilterCategory !== 'all') list = list.filter(p => (p.category || '默认') === this.productFilterCategory);
-                // 搜索
-                if (this.searchText) { const low = this.searchText.toLowerCase(); list = list.filter(p => p.name?.toLowerCase().includes(low) || p.barcode.includes(low)); }
-                return list;
+                
+                if (this.searchText) { 
+                    const low = this.searchText.toLowerCase().trim(); 
+                    list = list.filter(p => p.name?.toLowerCase().includes(low) || p.barcode.includes(low)); 
+                }
+                // 限制渲染数量防止卡顿
+                return list.slice(0, 50);
             },
-            filteredOrdersList() { return this.orders.filter(o => o.status === this.orderFilterType).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); },
+            filteredOrdersList() { return this.orders.filter(o => o.status === this.orderFilterType).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 50); },
             cartTotalPrice() { return this.cart.reduce((s, i) => s + (i.unit_price * i.quantity), 0).toFixed(2); },
             cartTotalQty() { return this.cart.reduce((s, i) => s + i.quantity, 0); },
             viewingOrderItems() { return this.viewingOrder ? this.orderItems.filter(i => i.order_id === this.viewingOrder.id) : []; },
@@ -417,6 +422,62 @@
             this.autoFocusPC('cashier'); 
         },
         methods: {
+            // --- 核心交互逻辑 ---
+            
+            // Bug 2 & 3 修复：管理页回车搜索/新建逻辑
+            handleManageSearch() {
+                const term = this.searchText.trim();
+                if (!term) return;
+
+                const p = this.products.find(x => x.barcode === term);
+                if (p) {
+                    // 找到了 -> 编辑
+                    this.editProduct(p);
+                    // 修复：清空搜索框以便下次扫码
+                    this.searchText = ''; 
+                } else {
+                    // 没找到 -> 直接打开新建窗口
+                    this.openEntryModal(term);
+                }
+            },
+
+            // 打开新建窗口并自动聚焦名称
+            openEntryModal(barcode) {
+                this.entryForm = { barcode: barcode, name: '', category: '', wholesale_price: '', retail_price: '' };
+                this.showEntryModal = true;
+                // 自动聚焦到名称输入框
+                this.$nextTick(() => {
+                    if(!this.isMobile && this.$refs.modalName) this.$refs.modalName.focus();
+                });
+            },
+
+            // 关闭新建窗口
+            closeEntryModal() {
+                this.showEntryModal = false;
+                if (this.currentTab === 'manage') {
+                    this.searchText = '';
+                    this.autoFocusPC('manage');
+                } else if (this.currentTab === 'entry') {
+                    this.scanning = true;
+                    this.startScanner('entry');
+                }
+            },
+
+            // 扫码枪/回车逻辑：在录入页条码框回车
+            handleBarcodeEnter() {
+                if(this.entryForm.barcode) { 
+                    const p = this.products.find(x => x.barcode === this.entryForm.barcode); 
+                    if(p) {
+                        alert('已存在: '+p.name); 
+                        this.entryForm.barcode = ''; // 清空防误操
+                    } else {
+                        // 条码可用，跳到名称
+                        this.$refs.nameInput.focus();
+                    }
+                }
+            },
+
+            // --- 扫码与摄像头 ---
             playBeep() { 
                 try {
                     const a = new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAAB3d3d3d3d3d4eHh4eHh4eHl5eXl5eXl5eYmJiYmJiYmJiXl5eXl5eXl5eHh4eHh4eHh4d3d3d3d3d3d3d3d3d3d3d3d4eHh4eHh4eHl5eXl5eXl5eYmJiYmJiYmJiXl5eXl5eXl5eHh4eHh4eHh4d3d3d3d3d3dw=="); 
@@ -428,10 +489,16 @@
             async confirmAndContinueScan() {
                 if (!this.saveProduct()) return; 
                 this.showEntryModal = false;
+                
                 if (this.currentTab === 'entry') {
+                    // 录入页：重启摄像头
                     this.scanning = false; await this.$nextTick(); 
                     this.scanning = true; await this.$nextTick(); 
                     this.startScanner('entry');
+                } else if (this.currentTab === 'manage') {
+                    // Bug 3 修复：管理页：清空搜索，聚焦输入框
+                    this.searchText = '';
+                    this.autoFocusPC('manage');
                 }
             },
 
@@ -457,21 +524,19 @@
                 
                 if (tab === 'entry') { 
                     this.entryForm.barcode = txt; 
-                    if(this.isMobile){this.stopScanner();this.showEntryModal=true;}else{this.handleBarcodeEnter();} 
+                    if(this.isMobile){this.stopScanner();this.showEntryModal=true;}
+                    else { 
+                        // PC端扫码录入 -> 跳到名称
+                        this.handleBarcodeEnter();
+                    } 
                 }
                 else if (tab === 'cashier') { 
                     this.cashierSearch = txt; this.addToCartByInput(); 
                 }
                 else if (tab === 'manage') { 
-                    const p = this.products.find(x => x.barcode === txt);
-                    if (p) {
-                        this.manageProductModal = JSON.parse(JSON.stringify(p)); 
-                    } else {
-                        // 没找到则新建
-                        this.entryForm = { barcode: txt, name: '', category: '', wholesale_price: '', retail_price: '' };
-                        if(this.isMobile) this.stopScanner();
-                        this.showEntryModal = true; 
-                    }
+                    // 管理页扫码 -> 走通用搜索逻辑
+                    this.searchText = txt;
+                    this.handleManageSearch();
                 }
             },
 
@@ -489,6 +554,7 @@
                 });
             },
 
+            // --- 数据操作 ---
             saveProduct() {
                 if (!this.entryForm.barcode) { alert('缺条码'); return false; }
                 const p = { 
@@ -503,8 +569,19 @@
                 this.products.unshift(p); localStorage.setItem('products', JSON.stringify(this.products));
                 this.addToSyncQueue('products', 'insert', p);
                 this.recentProducts.unshift(p);
+                
+                // 重置表单
                 this.entryForm = { barcode: '', name: '', category: '', wholesale_price: '', retail_price: '' };
-                this.autoFocusPC('entry');
+                
+                // 聚焦逻辑
+                if (this.currentTab === 'entry') {
+                    this.autoFocusPC('entry');
+                } else if (this.currentTab === 'manage') {
+                    // 如果是在管理页通过弹窗新建的
+                    this.showEntryModal = false;
+                    this.searchText = '';
+                    this.autoFocusPC('manage');
+                }
                 return true;
             },
             
@@ -572,12 +649,23 @@
             removeFromCart(i) { this.cart.splice(i, 1); }, clearCart() { if(confirm('清空?')) this.cart = []; },
             voidOrder(o) { if(!confirm('作废?')) return; o.status = 'void'; localStorage.setItem('orders', JSON.stringify(this.orders)); this.addToSyncQueue('orders', 'update', { id: o.id, status: 'void' }); },
             
-            editProduct(p) { this.manageProductModal = JSON.parse(JSON.stringify(p)); },
+            // Bug 4 优化：编辑窗口打开逻辑
+            editProduct(p) { 
+                this.manageProductModal = JSON.parse(JSON.stringify(p));
+                // 打开后自动聚焦名称修改
+                this.$nextTick(() => {
+                    if(!this.isMobile && this.$refs.editName) this.$refs.editName.focus();
+                });
+            },
             async updateProduct(p) { 
                 const idx = this.products.findIndex(x => x.id === p.id); if(idx!==-1) this.products[idx] = p; 
                 localStorage.setItem('products', JSON.stringify(this.products)); 
                 this.addToSyncQueue('products', 'update', p); 
                 this.manageProductModal = null; 
+                
+                // 修复 Bug 3: 编辑完后清空搜索，聚焦回搜索框
+                this.searchText = '';
+                this.autoFocusPC('manage');
             },
             async deleteProduct(p) { 
                 if(!confirm('删除?')) return; 
@@ -586,6 +674,10 @@
                 localStorage.setItem('products', JSON.stringify(this.products)); 
                 if(this.isOnline) await this.supabase.from('products').delete().eq('id', id); else this.addToSyncQueue('products', 'delete', {id}); 
                 this.manageProductModal = null; 
+                
+                // 修复 Bug 3
+                this.searchText = '';
+                this.autoFocusPC('manage');
             },
             
             exportExcel() { const ws=XLSX.utils.json_to_sheet(this.products); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Products"); XLSX.writeFile(wb,"Products.xlsx"); },
@@ -594,7 +686,6 @@
                 r.onload=(ev)=>{ const d=XLSX.utils.sheet_to_json(XLSX.read(ev.target.result,{type:'binary'}).Sheets[Object.keys(XLSX.read(ev.target.result,{type:'binary'}).Sheets)[0]]); 
                 if(confirm(`导入${d.length}条?`)) { d.forEach(r=>{ const p={id:Date.now()+Math.random().toString(),barcode:r['barcode']||r['条码'],name:r['name']||r['名称'],wholesale_price:r['wholesale']||0,retail_price:r['retail']||0,status:'active',category:'默认'}; if(p.barcode) { this.products.unshift(p); this.addToSyncQueue('products','insert',p); } }); window.location.reload(); } }; r.readAsBinaryString(f); 
             },
-            handleBarcodeEnter() { if(this.entryForm.barcode) { const p = this.products.find(x => x.barcode === this.entryForm.barcode); if(p) alert('已存在: '+p.name); } },
             formatDate(s) { return new Date(s).toLocaleString('zh-CN', { timeZone: 'America/Sao_Paulo', month:'numeric', day:'numeric', hour:'numeric', minute:'numeric', hour12: false }); },
             scrollToInput(e) { setTimeout(()=>e.target.scrollIntoView({behavior:'smooth',block:'center'}), 300); }
         }
