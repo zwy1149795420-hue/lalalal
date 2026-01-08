@@ -225,14 +225,20 @@
                 </div>
 
                 <div class="flex-1 overflow-y-auto custom-scroll grid grid-cols-1 md:grid-cols-3 gap-2 content-start pb-20">
-                    <div v-for="p in filteredProducts" :key="p.id" @click="editProduct(p)" class="bg-white p-3 rounded-xl border border-slate-100 shadow-sm active:scale-95 transition-transform relative overflow-hidden group">
-                        <div v-if="p.status==='disabled'" class="absolute right-0 top-0 bg-red-100 text-red-600 text-[10px] px-2 rounded-bl font-bold">已暂停</div>
-                        <h3 class="font-bold text-sm text-slate-800 truncate pr-8">{{ p.name }}</h3>
-                        <p class="text-[10px] text-slate-400 font-mono mb-1">{{ p.barcode }}</p>
-                        <p class="text-[10px] text-slate-500 mb-2 bg-slate-100 inline-block px-1.5 rounded">{{ p.category || '默认' }}</p>
-                        <div class="flex justify-between border-t border-slate-50 pt-1.5">
-                            <span class="text-[10px] text-slate-400">批:{{ p.wholesale_price }}</span>
-                            <span class="text-xs font-bold text-blue-600">零:{{ p.retail_price }}</span>
+                        <div v-for="p in filteredProducts" :key="p.id" @click="editProduct(p)" class="bg-white p-3 rounded-xl border border-slate-100 shadow-sm active:scale-95 transition-transform relative group flex flex-col justify-between min-h-[110px]">
+                        <div v-if="p.status==='disabled'" class="absolute right-0 top-0 bg-red-100 text-red-600 text-[10px] px-2 rounded-bl-lg font-bold z-10">已暂停</div>
+                        
+                        <div>
+                            <h3 class="font-bold text-sm text-slate-800 line-clamp-2 leading-tight mb-1 pr-6">{{ p.name }}</h3>
+                            <div class="flex items-center gap-2 mb-2">
+                                <p class="text-[10px] text-slate-400 font-mono bg-slate-50 px-1 rounded">{{ p.barcode }}</p>
+                                <p class="text-[10px] text-slate-500 bg-blue-50 px-1 rounded truncate max-w-[80px]">{{ p.category || '默认' }}</p>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-between items-end border-t border-slate-50 pt-2 mt-1">
+                            <span class="text-[10px] text-slate-400 font-medium">批: {{ p.wholesale_price }}</span>
+                            <span class="text-sm font-black text-blue-600">R$ {{ p.retail_price }}</span>
                         </div>
                     </div>
                     <div v-if="filteredProducts.length===0" class="col-span-full text-center py-10 text-slate-400 text-xs">
@@ -694,4 +700,5 @@
 </script>
 </body>
 </html>
+
 
